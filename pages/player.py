@@ -1,9 +1,7 @@
 import streamlit as st
 import requests
 import re
-import pandas as pd
 from datetime import datetime
-from sqlalchemy import create_engine
 
 st.set_page_config(
     page_title="Player Detail",
@@ -16,23 +14,29 @@ REPLAY_SEARCH_URL = (
     "https://replay.pokemonshowdown.com/search.json"
 )
 
-engine = create_engine(
-    "sqlite:///champions_ma.db"
-)
-
 # =========================
 # PLAYER
 # =========================
 
-player = st.query_params.get(
-    "player",
+player = st.session_state.get(
+    "selected_player",
     "Unknown"
 )
 
-st.title(player)
+# =========================
+# HEADER
+# =========================
+
+top1, top2 = st.columns([1, 5])
+
+if top1.button("← Back"):
+
+    st.switch_page("app.py")
+
+top2.title(player)
 
 # =========================
-# REPLAY API
+# API
 # =========================
 
 @st.cache_data(ttl=300)
@@ -43,18 +47,24 @@ def fetch_replays(username):
         "format": FORMAT_ID
     }
 
-    r = requests.get(
-        REPLAY_SEARCH_URL,
-        params=params,
-        timeout=20
-    )
+    try:
 
-    data = r.json()
+        r = requests.get(
+            REPLAY_SEARCH_URL,
+            params=params,
+            timeout=20
+        )
 
-    if not isinstance(data, list):
+        data = r.json()
+
+        if not isinstance(data, list):
+            return []
+
+        return data
+
+    except:
+
         return []
-
-    return data
 
 @st.cache_data(ttl=300)
 def fetch_log(replay_id):
@@ -64,27 +74,33 @@ def fetch_log(replay_id):
         f"{replay_id}.log"
     )
 
-    r = requests.get(
-        url,
-        timeout=20
-    )
+    try:
 
-    if r.status_code != 200:
+        r = requests.get(
+            url,
+            timeout=20
+        )
+
+        if r.status_code != 200:
+            return ""
+
+        return r.text
+
+    except:
+
         return ""
 
-    return r.text
-
 # =========================
-# TEAM
+# TEAM EXTRACTION
 # =========================
 
-POKE_REGEX = r"\|poke\|p1\|([^,\n]+)"
+P1_REGEX = r"\|poke\|p1\|([^,\n]+)"
 P2_REGEX = r"\|poke\|p2\|([^,\n]+)"
 
 def extract_teams(log_text):
 
     p1 = re.findall(
-        POKE_REGEX,
+        P1_REGEX,
         log_text
     )
 
@@ -115,24 +131,36 @@ def extract_teams(log_text):
 # ICON URL
 # =========================
 
+def clean_name(name):
+
+    name = name.lower()
+
+    replacements = {
+        " ": "",
+        ".": "",
+        "'": "",
+        "%": "",
+        ":": "",
+        "-": "",
+    }
+
+    for old, new in replacements.items():
+
+        name = name.replace(old, new)
+
+    return name
+
 def icon_url(name):
 
-    name = (
-        name.lower()
-        .replace(" ", "")
-        .replace(".", "")
-        .replace("'", "")
-        .replace("%", "")
-        .replace(":", "")
-    )
+    cleaned = clean_name(name)
 
     return (
-        "https://play.pokemonshowdown.com/sprites/gen5/"
-        f"{name}.png"
+        "https://play.pokemonshowdown.com/"
+        f"sprites/gen5/{cleaned}.png"
     )
 
 # =========================
-# REPLAYS
+# MAIN
 # =========================
 
 replays = fetch_replays(player)
@@ -143,86 +171,92 @@ if len(replays) == 0:
 
     st.info("公開Replayなし")
 
-else:
+    st.stop()
 
-    for replay in replays:
+# =========================
+# REPLAY CARDS
+# =========================
 
-        replay_id = replay.get(
-            "id",
-            ""
+for replay in replays:
+
+    replay_id = replay.get(
+        "id",
+        ""
+    )
+
+    if not replay_id:
+        continue
+
+    replay_url = (
+        "https://replay.pokemonshowdown.com/"
+        f"{replay_id}"
+    )
+
+    rating = replay.get(
+        "rating",
+        "?"
+    )
+
+    uploadtime = replay.get(
+        "uploadtime"
+    )
+
+    if uploadtime:
+
+        date_text = datetime.fromtimestamp(
+            uploadtime
+        ).strftime(
+            "%Y-%m-%d"
         )
 
-        if not replay_id:
-            continue
+    else:
 
-        replay_url = (
-            "https://replay.pokemonshowdown.com/"
-            f"{replay_id}"
+        date_text = "Unknown"
+
+    log_text = fetch_log(
+        replay_id
+    )
+
+    p1_team, p2_team = extract_teams(
+        log_text
+    )
+
+    with st.container(border=True):
+
+        st.link_button(
+            f"Rate {rating} | {date_text}",
+            replay_url,
+            use_container_width=True
         )
 
-        rating = replay.get(
-            "rating",
-            "?"
-        )
+        st.write("### P1")
 
-        uploadtime = replay.get(
-            "uploadtime"
-        )
+        cols = st.columns(6)
 
-        if uploadtime:
+        for i, mon in enumerate(p1_team):
 
-            date_text = datetime.fromtimestamp(
-                uploadtime
-            ).strftime(
-                "%Y-%m-%d"
-            )
+            if i >= 6:
+                break
 
-        else:
+            with cols[i]:
 
-            date_text = "Unknown"
+                st.image(
+                    icon_url(mon),
+                    width=52
+                )
 
-        log_text = fetch_log(
-            replay_id
-        )
+        st.write("### P2")
 
-        p1_team, p2_team = extract_teams(
-            log_text
-        )
+        cols2 = st.columns(6)
 
-        with st.container(border=True):
+        for i, mon in enumerate(p2_team):
 
-            st.link_button(
-                f"{rating} | {date_text}",
-                replay_url,
-                use_container_width=True
-            )
+            if i >= 6:
+                break
 
-            st.write("P1")
+            with cols2[i]:
 
-            cols = st.columns(6)
-
-            for i, mon in enumerate(p1_team):
-
-                with cols[i]:
-
-                    st.image(
-                        icon_url(mon),
-                        width=50
-                    )
-
-                    st.caption(mon)
-
-            st.write("P2")
-
-            cols2 = st.columns(6)
-
-            for i, mon in enumerate(p2_team):
-
-                with cols2[i]:
-
-                    st.image(
-                        icon_url(mon),
-                        width=50
-                    )
-
-                    st.caption(mon)
+                st.image(
+                    icon_url(mon),
+                    width=52
+                )
