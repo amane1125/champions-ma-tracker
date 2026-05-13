@@ -4,18 +4,11 @@ import requests
 import re
 from datetime import datetime, timezone
 
-# =========================
-# PAGE
-# =========================
-
 st.set_page_config(
     page_title="Champions M-A Tracker",
+    page_icon="🎮",
     layout="wide"
 )
-
-# =========================
-# CONFIG
-# =========================
 
 FORMAT_ID = "gen9championsvgc2026regma"
 
@@ -63,25 +56,23 @@ def fetch_ladder():
 @st.cache_data(ttl=300)
 def fetch_replays(username):
 
-    params = {
-        "user": username,
-        "format": FORMAT_ID
-    }
-
     try:
 
         r = requests.get(
             REPLAY_SEARCH_URL,
-            params=params,
+            params={
+                "user": username,
+                "format": FORMAT_ID
+            },
             timeout=20
         )
 
         data = r.json()
 
-        if not isinstance(data, list):
-            return []
+        if isinstance(data, list):
+            return data
 
-        return data
+        return []
 
     except:
 
@@ -97,10 +88,10 @@ def fetch_log(replay_id):
             timeout=20
         )
 
-        if r.status_code != 200:
-            return ""
+        if r.status_code == 200:
+            return r.text
 
-        return r.text
+        return ""
 
     except:
 
@@ -110,37 +101,21 @@ def fetch_log(replay_id):
 # TEAM
 # =========================
 
-P1_REGEX = r"\|poke\|p1\|([^,\n]+)"
-P2_REGEX = r"\|poke\|p2\|([^,\n]+)"
-
 def extract_teams(log_text):
 
     p1 = re.findall(
-        P1_REGEX,
+        r"\|poke\|p1\|([^,\n]+)",
         log_text
     )
 
     p2 = re.findall(
-        P2_REGEX,
+        r"\|poke\|p2\|([^,\n]+)",
         log_text
     )
 
-    p1_unique = []
-    p2_unique = []
-
-    for mon in p1:
-
-        if mon not in p1_unique:
-            p1_unique.append(mon)
-
-    for mon in p2:
-
-        if mon not in p2_unique:
-            p2_unique.append(mon)
-
     return (
-        p1_unique[:6],
-        p2_unique[:6]
+        list(dict.fromkeys(p1))[:6],
+        list(dict.fromkeys(p2))[:6]
     )
 
 # =========================
@@ -151,42 +126,38 @@ def clean_name(name):
 
     name = name.lower()
 
-    replacements = {
-        " ": "",
-        ".": "",
-        "'": "",
-        "%": "",
-        ":": "",
-        "-": "",
-    }
+    for c in [
+        " ",
+        ".",
+        "'",
+        "%",
+        ":",
+        "-"
+    ]:
 
-    for old, new in replacements.items():
-
-        name = name.replace(old, new)
+        name = name.replace(c, "")
 
     return name
 
 def icon_url(name):
 
-    cleaned = clean_name(name)
-
     return (
         "https://play.pokemonshowdown.com/"
-        f"sprites/gen5/{cleaned}.png"
+        f"sprites/gen5/{clean_name(name)}.png"
     )
 
 # =========================
-# LAST REPLAY
+# REPLAY STATUS
 # =========================
 
 def latest_replay_info(name):
 
     replays = fetch_replays(name)
 
-    if len(replays) == 0:
+    if not replays:
 
         return (
-            "❌",
+            "🔴",
             "No Replay",
             999
         )
@@ -210,11 +181,10 @@ def latest_replay_info(name):
         tz=timezone.utc
     )
 
-    now = datetime.now(
-        timezone.utc
-    )
-
-    diff = (now - dt).days
+    diff = (
+        datetime.now(timezone.utc)
+        - dt
+    ).days
 
     if diff <= 1:
         status = "🟢"
@@ -227,7 +197,7 @@ def latest_replay_info(name):
 
     return (
         status,
-        dt.strftime("%Y-%m-%d"),
+        dt.strftime("%m/%d"),
         diff
     )
 
@@ -246,9 +216,7 @@ player = st.query_params.get(
 
 if not player:
 
-    st.title(
-        "🎮 Champions M-A Tracker"
-    )
+    st.title("🎮 Champions M-A Tracker")
 
     st.caption(
         "[Gen 9 Champions] VGC 2026 Reg M-A"
@@ -257,7 +225,7 @@ if not player:
     ladder_df = fetch_ladder()
 
     search = st.text_input(
-        "🔍 Player Search"
+        "🔍 Search Player"
     )
 
     if search:
@@ -272,18 +240,6 @@ if not player:
 
     st.divider()
 
-    header = st.columns(
-        [1, 4, 2, 2, 3]
-    )
-
-    header[0].markdown("### #")
-    header[1].markdown("### Player")
-    header[2].markdown("### Elo")
-    header[3].markdown("### GXE")
-    header[4].markdown("### Latest")
-
-    st.divider()
-
     for _, row in ladder_df.iterrows():
 
         status, replay_date, diff = (
@@ -292,52 +248,45 @@ if not player:
             )
         )
 
-        cols = st.columns(
-            [1, 4, 2, 2, 3]
-        )
+        with st.container(border=True):
 
-        cols[0].markdown(
-            f"### {row['Rank']}"
-        )
-
-        if cols[1].button(
-            f"{status} {row['Name']}",
-            key=row["Name"],
-            use_container_width=True
-        ):
-
-            st.query_params["player"] = (
-                row["Name"]
+            c1, c2, c3, c4 = st.columns(
+                [1, 5, 2, 2]
             )
 
-            st.rerun()
+            c1.markdown(
+                f"### #{row['Rank']}"
+            )
 
-        cols[2].metric(
-            "",
-            row["Elo"]
-        )
+            if c2.button(
+                f"{status} {row['Name']}",
+                key=row["Name"],
+                use_container_width=True
+            ):
 
-        cols[3].metric(
-            "",
-            row["GXE"]
-        )
+                st.query_params["player"] = (
+                    row["Name"]
+                )
 
-        replay_color = "🟢"
+                st.rerun()
 
-        if diff > 7:
-            replay_color = "🔴"
+            c3.markdown(
+                f"""
+                **Elo**  
+                {row['Elo']}
+                """
+            )
 
-        elif diff > 1:
-            replay_color = "🟡"
+            c4.markdown(
+                f"""
+                **GXE**  
+                {row['GXE']}
+                """
+            )
 
-        cols[4].markdown(
-            f"""
-            ### {replay_color}
-            {replay_date}
-            """
-        )
-
-        st.divider()
+            st.caption(
+                f"Latest Replay: {replay_date}"
+            )
 
 # =========================
 # PLAYER PAGE
@@ -359,33 +308,12 @@ else:
         f"{len(replays)} Public Replays"
     )
 
-    if len(replays) == 0:
+    if not replays:
 
-        st.info("公開Replayなし")
-
+        st.info("Replayなし")
         st.stop()
 
-    # =====================
-    # TABLE HEADER
-    # =====================
-
-    header = st.columns(
-        [1, 4, 4, 2, 2]
-    )
-
-    header[0].markdown("### Rate")
-    header[1].markdown("### Player 1")
-    header[2].markdown("### Player 2")
-    header[3].markdown("### Result")
-    header[4].markdown("### Date")
-
-    st.divider()
-
-    # =====================
-    # REPLAYS
-    # =====================
-
-    for i, replay in enumerate(replays):
+    for replay in replays:
 
         replay_id = replay.get(
             "id",
@@ -460,81 +388,69 @@ else:
 
             winner = win_match.group(1)
 
-            if winner == player:
-
-                result = "🟢 WIN"
-
-            else:
-
-                result = "🔴 LOSE"
+            result = (
+                "🟢 WIN"
+                if winner == player
+                else "🔴 LOSE"
+            )
 
         else:
 
             result = "-"
 
-        # =====================
-        # ICONS
-        # =====================
+        with st.container(border=True):
 
-        p1_icons = ""
-
-        for mon in p1_team:
-
-            p1_icons += (
-                f'<img src="{icon_url(mon)}" width="28">'
+            top1, top2, top3 = st.columns(
+                [2, 2, 1]
             )
 
-        p2_icons = ""
-
-        for mon in p2_team:
-
-            p2_icons += (
-                f'<img src="{icon_url(mon)}" width="28">'
+            top1.markdown(
+                f"### {rating}"
             )
 
-        cols = st.columns(
-            [1, 4, 4, 2, 2]
-        )
+            top2.markdown(
+                f"### {result}"
+            )
 
-        cols[0].markdown(
-            f"### {rating}"
-        )
+            top3.markdown(
+                f"### {date_text}"
+            )
 
-        cols[1].markdown(
-            f"""
-            **{p1_name}**
+            st.divider()
 
-            {p1_icons}
-            """,
-            unsafe_allow_html=True
-        )
+            p1_icons = ""
 
-        cols[2].markdown(
-            f"""
-            **{p2_name}**
+            for mon in p1_team:
 
-            {p2_icons}
-            """,
-            unsafe_allow_html=True
-        )
+                p1_icons += (
+                    f'<img src="{icon_url(mon)}" width="30">'
+                )
 
-        cols[3].markdown(
-            f"### {result}"
-        )
+            p2_icons = ""
 
-        cols[4].markdown(
-            f"### {date_text}"
-        )
+            for mon in p2_team:
 
-        if st.button(
-            "Open Replay",
-            key=f"replay_{i}",
-            use_container_width=True
-        ):
+                p2_icons += (
+                    f'<img src="{icon_url(mon)}" width="30">'
+                )
+
+            st.markdown(
+                f"""
+                **{p1_name}**
+
+                {p1_icons}
+
+                vs
+
+                **{p2_name}**
+
+                {p2_icons}
+                """,
+                unsafe_allow_html=True
+            )
 
             st.link_button(
-                "Go",
-                replay_url
+                "Open Replay",
+                replay_url,
+                use_container_width=True
             )
-
-        st.divider()
