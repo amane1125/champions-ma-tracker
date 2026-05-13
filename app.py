@@ -4,11 +4,19 @@ import requests
 import re
 from datetime import datetime, timezone
 
+# =========================
+# PAGE
+# =========================
+
 st.set_page_config(
     page_title="Champions M-A Tracker",
     page_icon="🎮",
     layout="wide"
 )
+
+# =========================
+# CONFIG
+# =========================
 
 FORMAT_ID = "gen9championsvgc2026regma"
 
@@ -42,7 +50,8 @@ def fetch_ladder():
 
     rows = []
 
-    for i, p in enumerate(data[:100], start=1):
+    # TOP500
+    for i, p in enumerate(data[:500], start=1):
 
         rows.append({
             "Rank": i,
@@ -157,7 +166,7 @@ def latest_replay_info(name):
     if not replays:
 
         return (
-            "🔴",
+            "❌",
             "No Replay",
             999
         )
@@ -228,6 +237,11 @@ if not player:
         "🔍 Search Player"
     )
 
+    only_replay = st.toggle(
+        "📹 Replayありのみ表示",
+        value=False
+    )
+
     if search:
 
         ladder_df = ladder_df[
@@ -238,7 +252,7 @@ if not player:
             )
         ]
 
-    st.divider()
+    display_rows = []
 
     for _, row in ladder_df.iterrows():
 
@@ -248,45 +262,72 @@ if not player:
             )
         )
 
-        with st.container(border=True):
+        if (
+            only_replay
+            and replay_date == "No Replay"
+        ):
+            continue
 
-            c1, c2, c3, c4 = st.columns(
-                [1, 5, 2, 2]
-            )
+        display_rows.append({
 
-            c1.markdown(
-                f"### #{row['Rank']}"
-            )
+            "Rank":
+                row["Rank"],
 
-            if c2.button(
+            "Player":
                 f"{status} {row['Name']}",
-                key=row["Name"],
-                use_container_width=True
-            ):
 
-                st.query_params["player"] = (
-                    row["Name"]
-                )
+            "Elo":
+                row["Elo"],
 
-                st.rerun()
+            "GXE":
+                row["GXE"],
 
-            c3.markdown(
-                f"""
-                **Elo**  
-                {row['Elo']}
-                """
-            )
+            "Latest":
+                replay_date
+        })
 
-            c4.markdown(
-                f"""
-                **GXE**  
-                {row['GXE']}
-                """
-            )
+    display_df = pd.DataFrame(
+        display_rows
+    )
 
-            st.caption(
-                f"Latest Replay: {replay_date}"
-            )
+    st.caption(
+        f"{len(display_df)} players"
+    )
+
+    selected = st.dataframe(
+        display_df,
+        use_container_width=True,
+        hide_index=True,
+        on_select="rerun",
+        selection_mode="single-row"
+    )
+
+    if (
+        selected
+        and len(
+            selected.selection.rows
+        ) > 0
+    ):
+
+        idx = selected.selection.rows[0]
+
+        visible_name = (
+            display_df.iloc[idx]["Player"]
+        )
+
+        player_name = (
+            visible_name
+            .replace("🟢 ", "")
+            .replace("🟡 ", "")
+            .replace("🔴 ", "")
+            .replace("❌ ", "")
+        )
+
+        st.query_params["player"] = (
+            player_name
+        )
+
+        st.rerun()
 
 # =========================
 # PLAYER PAGE
@@ -342,12 +383,12 @@ else:
             date_text = datetime.fromtimestamp(
                 uploadtime
             ).strftime(
-                "%Y/%m/%d"
+                "%m/%d"
             )
 
         else:
 
-            date_text = "Unknown"
+            date_text = "?"
 
         log_text = fetch_log(
             replay_id
@@ -389,68 +430,111 @@ else:
             winner = win_match.group(1)
 
             result = (
-                "🟢 WIN"
+                "🟢"
                 if winner == player
-                else "🔴 LOSE"
+                else "🔴"
             )
 
         else:
 
-            result = "-"
+            result = "⚪"
 
-        with st.container(border=True):
+        p1_icons = ""
 
-            top1, top2, top3 = st.columns(
-                [2, 2, 1]
+        for mon in p1_team:
+
+            p1_icons += (
+                f'<img src="{icon_url(mon)}" width="26">'
             )
 
-            top1.markdown(
-                f"### {rating}"
+        p2_icons = ""
+
+        for mon in p2_team:
+
+            p2_icons += (
+                f'<img src="{icon_url(mon)}" width="26">'
             )
 
-            top2.markdown(
-                f"### {result}"
-            )
+        st.markdown(
+            f"""
+            <a
+            href="{replay_url}"
+            target="_blank"
+            style="
+            text-decoration:none;
+            color:inherit;
+            "
+            >
 
-            top3.markdown(
-                f"### {date_text}"
-            )
+            <div style="
+            border:1px solid #333;
+            border-radius:12px;
+            padding:10px;
+            margin-bottom:10px;
+            background:#111827;
+            ">
 
-            st.divider()
+            <div style="
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            margin-bottom:6px;
+            color:white;
+            ">
 
-            p1_icons = ""
+            <div style="
+            font-weight:bold;
+            font-size:18px;
+            ">
+            {rating}
+            </div>
 
-            for mon in p1_team:
+            <div>
+            {result}
+            </div>
 
-                p1_icons += (
-                    f'<img src="{icon_url(mon)}" width="30">'
-                )
+            <div>
+            {date_text}
+            </div>
 
-            p2_icons = ""
+            </div>
 
-            for mon in p2_team:
+            <div style="
+            margin-bottom:8px;
+            color:white;
+            ">
 
-                p2_icons += (
-                    f'<img src="{icon_url(mon)}" width="30">'
-                )
+            <div style="
+            font-size:14px;
+            font-weight:bold;
+            margin-bottom:4px;
+            ">
+            {p1_name}
+            </div>
 
-            st.markdown(
-                f"""
-                **{p1_name}**
+            {p1_icons}
 
-                {p1_icons}
+            </div>
 
-                vs
+            <div style="
+            color:white;
+            ">
 
-                **{p2_name}**
+            <div style="
+            font-size:14px;
+            font-weight:bold;
+            margin-bottom:4px;
+            ">
+            {p2_name}
+            </div>
 
-                {p2_icons}
-                """,
-                unsafe_allow_html=True
-            )
+            {p2_icons}
 
-            st.link_button(
-                "Open Replay",
-                replay_url,
-                use_container_width=True
-            )
+            </div>
+
+            </div>
+
+            </a>
+            """,
+            unsafe_allow_html=True
+        )
