@@ -23,19 +23,8 @@ st.markdown("""
 <style>
 
 .block-container {
-    padding-top: 1.5rem;
-}
-
-div[data-testid="stVerticalBlock"] > div:has(div.replay-card) {
-    border-radius: 18px;
-}
-
-.replay-card {
-    padding: 12px;
-    border-radius: 16px;
-    background-color: #111827;
-    margin-bottom: 14px;
-    border: 1px solid #1f2937;
+    padding-top: 1rem;
+    max-width: 100%;
 }
 
 .player-card {
@@ -46,19 +35,17 @@ div[data-testid="stVerticalBlock"] > div:has(div.replay-card) {
     border: 1px solid #1f2937;
 }
 
-.good {
-    color: #22c55e;
-    font-weight: bold;
-}
-
-.bad {
-    color: #ef4444;
-    font-weight: bold;
-}
-
 .small {
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     opacity: 0.8;
+}
+
+table {
+    border-collapse: collapse;
+}
+
+tr:hover {
+    background-color: #1f2937;
 }
 
 </style>
@@ -289,7 +276,7 @@ def latest_replay_info(name):
     )
 
 # =========================
-# PLAYER QUERY
+# QUERY
 # =========================
 
 player = st.query_params.get(
@@ -417,6 +404,51 @@ else:
 
         st.stop()
 
+    # =========================
+    # TABLE UI
+    # =========================
+
+    table_html = """
+    <div style="
+    overflow-x:auto;
+    border-radius:16px;
+    border:1px solid #333;
+    ">
+
+    <table style="
+    width:100%;
+    border-collapse:collapse;
+    font-size:14px;
+    text-align:center;
+    ">
+
+    <tr style="
+    background:#111827;
+    ">
+
+    <th style="padding:10px;">
+    Rate
+    </th>
+
+    <th>
+    Player 1
+    </th>
+
+    <th>
+    Player 2
+    </th>
+
+    <th>
+    Result
+    </th>
+
+    <th>
+    Date
+    </th>
+
+    </tr>
+    """
+
     for replay in replays:
 
         replay_id = replay.get(
@@ -446,7 +478,7 @@ else:
             date_text = datetime.fromtimestamp(
                 uploadtime
             ).strftime(
-                "%Y-%m-%d %H:%M"
+                "%Y/%m/%d"
             )
 
         else:
@@ -461,69 +493,149 @@ else:
             log_text
         )
 
-        st.markdown(
-            '<div class="replay-card">',
-            unsafe_allow_html=True
+        # =====================
+        # PLAYER NAMES
+        # =====================
+
+        p1_name_match = re.search(
+            r"\|player\|p1\|([^\n]+)",
+            log_text
         )
 
-        c1, c2, c3 = st.columns(
-            [3, 2, 2]
+        p2_name_match = re.search(
+            r"\|player\|p2\|([^\n]+)",
+            log_text
         )
 
-        c1.link_button(
-            "▶ Open Replay",
-            replay_url,
-            use_container_width=True
+        p1_name = (
+            p1_name_match.group(1)
+            if p1_name_match
+            else "P1"
         )
 
-        c2.metric(
-            "Rate",
-            rating
+        p2_name = (
+            p2_name_match.group(1)
+            if p2_name_match
+            else "P2"
         )
 
-        c3.markdown(
-            f"""
-            <div class="small">
-            Date<br>
-            <b>{date_text}</b>
-            </div>
-            """,
-            unsafe_allow_html=True
+        # =====================
+        # WINNER
+        # =====================
+
+        win_match = re.search(
+            r"\|win\|([^\n]+)",
+            log_text
         )
 
-        st.write("### P1")
+        if win_match:
 
-        cols = st.columns(6)
+            winner = win_match.group(1)
 
-        for i, mon in enumerate(p1_team):
+            if winner == p1_name:
 
-            if i >= 6:
-                break
-
-            with cols[i]:
-
-                st.image(
-                    icon_url(mon),
-                    width=54
+                result = (
+                    '<span style="color:#22c55e;">'
+                    'WIN'
+                    '</span>'
                 )
 
-        st.write("### P2")
+            else:
 
-        cols2 = st.columns(6)
-
-        for i, mon in enumerate(p2_team):
-
-            if i >= 6:
-                break
-
-            with cols2[i]:
-
-                st.image(
-                    icon_url(mon),
-                    width=54
+                result = (
+                    '<span style="color:#ef4444;">'
+                    'LOSE'
+                    '</span>'
                 )
 
-        st.markdown(
-            "</div>",
-            unsafe_allow_html=True
-        )
+        else:
+
+            result = "-"
+
+        # =====================
+        # ICONS
+        # =====================
+
+        p1_icons = ""
+
+        for mon in p1_team:
+
+            p1_icons += f'''
+            <img src="{icon_url(mon)}"
+            width="32">
+            '''
+
+        p2_icons = ""
+
+        for mon in p2_team:
+
+            p2_icons += f'''
+            <img src="{icon_url(mon)}"
+            width="32">
+            '''
+
+        # =====================
+        # ROW
+        # =====================
+
+        table_html += f"""
+
+        <tr
+        onclick="window.open('{replay_url}')"
+        style="
+        cursor:pointer;
+        border-top:1px solid #222;
+        "
+        >
+
+        <td style="padding:10px;">
+        {rating}
+        </td>
+
+        <td style="padding:10px;">
+
+        <div style="
+        font-weight:bold;
+        margin-bottom:6px;
+        ">
+        {p1_name}
+        </div>
+
+        <div>
+        {p1_icons}
+        </div>
+
+        </td>
+
+        <td style="padding:10px;">
+
+        <div style="
+        font-weight:bold;
+        margin-bottom:6px;
+        ">
+        {p2_name}
+        </div>
+
+        <div>
+        {p2_icons}
+        </div>
+
+        </td>
+
+        <td>
+        {result}
+        </td>
+
+        <td>
+        {date_text}
+        </td>
+
+        </tr>
+        """
+
+    table_html += "</table></div>"
+
+    st.markdown(
+        table_html,
+        unsafe_allow_html=True
+    )
