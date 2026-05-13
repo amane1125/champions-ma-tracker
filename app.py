@@ -129,21 +129,27 @@ st.subheader("Top 100 Ladder")
 
 for _, row in ladder_df.iterrows():
 
-    c1, c2, c3, c4, c5 = st.columns(
-        [1, 4, 2, 2, 2]
+    c1, c2, c3, c4 = st.columns(
+        [1, 5, 2, 2]
     )
 
     c1.write(
         f"#{row['Rank']}"
     )
 
-    c2.page_link(
-        "pages/player.py",
-        label=row["Name"],
-        query_params={
-            "player": row["Name"]
-        }
-    )
+    if c2.button(
+        row["Name"],
+        key=row["Name"],
+        use_container_width=True
+    ):
+
+        st.session_state["selected_player"] = (
+            row["Name"]
+        )
+
+        st.switch_page(
+            "pages/player.py"
+        )
 
     c3.write(
         f"{row['Elo']}"
