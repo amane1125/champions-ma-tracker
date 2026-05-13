@@ -1,9 +1,9 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import requests
 import re
 from datetime import datetime, timezone
-from sqlalchemy import create_engine
 
 # =========================
 # PAGE
@@ -14,42 +14,6 @@ st.set_page_config(
     page_icon="🎮",
     layout="wide"
 )
-
-# =========================
-# STYLE
-# =========================
-
-st.markdown("""
-<style>
-
-.block-container {
-    padding-top: 1rem;
-    max-width: 100%;
-}
-
-.player-card {
-    padding: 10px;
-    border-radius: 14px;
-    background-color: #111827;
-    margin-bottom: 8px;
-    border: 1px solid #1f2937;
-}
-
-.small {
-    font-size: 0.85rem;
-    opacity: 0.8;
-}
-
-table {
-    border-collapse: collapse;
-}
-
-tr:hover {
-    background-color: #1f2937;
-}
-
-</style>
-""", unsafe_allow_html=True)
 
 # =========================
 # CONFIG
@@ -66,10 +30,6 @@ REPLAY_SEARCH_URL = (
     "https://replay.pokemonshowdown.com/search.json"
 )
 
-engine = create_engine(
-    "sqlite:///champions_ma.db"
-)
-
 # =========================
 # API
 # =========================
@@ -77,12 +37,12 @@ engine = create_engine(
 @st.cache_data(ttl=300)
 def fetch_ladder():
 
-    res = requests.get(
+    r = requests.get(
         LADDER_URL,
         timeout=20
     )
 
-    data = res.json()
+    data = r.json()
 
     if isinstance(data, dict):
 
@@ -96,7 +56,7 @@ def fetch_ladder():
         rows.append({
             "Rank": i,
             "Name": p.get("username", "Unknown"),
-            "Elo": p.get("elo", 0),
+            "Elo": int(p.get("elo", 0)),
             "GXE": p.get("gxe", 0)
         })
 
@@ -132,15 +92,10 @@ def fetch_replays(username):
 @st.cache_data(ttl=300)
 def fetch_log(replay_id):
 
-    url = (
-        "https://replay.pokemonshowdown.com/"
-        f"{replay_id}.log"
-    )
-
     try:
 
         r = requests.get(
-            url,
+            f"https://replay.pokemonshowdown.com/{replay_id}.log",
             timeout=20
         )
 
@@ -234,7 +189,8 @@ def latest_replay_info(name):
 
         return (
             "❌",
-            "No Replay"
+            "No Replay",
+            999
         )
 
     latest = replays[0]
@@ -247,7 +203,8 @@ def latest_replay_info(name):
 
         return (
             "⚪",
-            "Unknown"
+            "Unknown",
+            999
         )
 
     dt = datetime.fromtimestamp(
@@ -272,7 +229,8 @@ def latest_replay_info(name):
 
     return (
         status,
-        dt.strftime("%Y-%m-%d")
+        dt.strftime("%Y-%m-%d"),
+        diff
     )
 
 # =========================
@@ -285,7 +243,7 @@ player = st.query_params.get(
 )
 
 # =========================
-# LADDER VIEW
+# TOP PAGE
 # =========================
 
 if not player:
@@ -301,7 +259,7 @@ if not player:
     ladder_df = fetch_ladder()
 
     search = st.text_input(
-        "🔍 プレイヤー検索"
+        "🔍 Player Search"
     )
 
     if search:
@@ -314,68 +272,145 @@ if not player:
             )
         ]
 
-    st.divider()
+    # =====================
+    # TABLE
+    # =====================
+
+    html = """
+
+    <style>
+
+    table {
+        width:100%;
+        border-collapse:collapse;
+        font-size:14px;
+        text-align:center;
+    }
+
+    th {
+        background:#111827;
+        padding:12px;
+        position:sticky;
+        top:0;
+        z-index:1;
+    }
+
+    td {
+        padding:12px;
+        border-top:1px solid #222;
+    }
+
+    tr:hover {
+        background:#1f2937;
+    }
+
+    .playerbtn {
+        background:#2563eb;
+        color:white;
+        padding:8px 14px;
+        border-radius:10px;
+        text-decoration:none;
+        font-weight:bold;
+        display:inline-block;
+    }
+
+    .small {
+        font-size:12px;
+        opacity:0.8;
+    }
+
+    </style>
+
+    <div style="
+    overflow-x:auto;
+    border-radius:16px;
+    border:1px solid #222;
+    ">
+
+    <table>
+
+    <tr>
+    <th>#</th>
+    <th>Player</th>
+    <th>Elo</th>
+    <th>GXE</th>
+    <th>Replay</th>
+    </tr>
+
+    """
 
     for _, row in ladder_df.iterrows():
 
-        status, replay_date = latest_replay_info(
-            row["Name"]
+        status, replay_date, diff = (
+            latest_replay_info(
+                row["Name"]
+            )
         )
 
-        with st.container():
+        replay_color = "#22c55e"
 
-            st.markdown(
-                '<div class="player-card">',
-                unsafe_allow_html=True
-            )
+        if diff > 7:
+            replay_color = "#ef4444"
 
-            c1, c2, c3, c4, c5 = st.columns(
-                [1, 4, 2, 2, 2]
-            )
+        elif diff > 1:
+            replay_color = "#facc15"
 
-            c1.markdown(
-                f"### #{row['Rank']}"
-            )
+        html += f"""
 
-            if c2.button(
-                f"{status} {row['Name']}",
-                key=row["Name"],
-                use_container_width=True
-            ):
+        <tr>
 
-                st.query_params["player"] = (
-                    row["Name"]
-                )
+        <td>
+        #{row['Rank']}
+        </td>
 
-                st.rerun()
+        <td>
 
-            c3.metric(
-                "Elo",
-                int(row["Elo"])
-            )
+        <a
+        class="playerbtn"
+        href="?player={row['Name']}"
+        target="_self"
+        >
 
-            c4.metric(
-                "GXE",
-                row["GXE"]
-            )
+        {status} {row['Name']}
 
-            c5.markdown(
-                f"""
-                <div class="small">
-                Latest Replay<br>
-                <b>{replay_date}</b>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+        </a>
 
-            st.markdown(
-                "</div>",
-                unsafe_allow_html=True
-            )
+        </td>
+
+        <td>
+        <b>{row['Elo']}</b>
+        </td>
+
+        <td>
+        {row['GXE']}
+        </td>
+
+        <td>
+
+        <span style="
+        color:{replay_color};
+        font-weight:bold;
+        ">
+
+        {replay_date}
+
+        </span>
+
+        </td>
+
+        </tr>
+        """
+
+    html += "</table></div>"
+
+    components.html(
+        html,
+        height=2200,
+        scrolling=True
+    )
 
 # =========================
-# PLAYER VIEW
+# PLAYER PAGE
 # =========================
 
 else:
@@ -396,57 +431,68 @@ else:
         f"{len(replays)} Public Replays"
     )
 
-    st.divider()
-
     if len(replays) == 0:
 
         st.info("公開Replayなし")
 
         st.stop()
 
-    # =========================
-    # TABLE UI
-    # =========================
+    # =====================
+    # TABLE
+    # =====================
 
     table_html = """
+
+    <style>
+
+    table {
+        width:100%;
+        border-collapse:collapse;
+        font-size:14px;
+        text-align:center;
+    }
+
+    th {
+        background:#111827;
+        padding:10px;
+        position:sticky;
+        top:0;
+        z-index:1;
+    }
+
+    td {
+        padding:10px;
+        border-top:1px solid #222;
+    }
+
+    tr:hover {
+        background:#1f2937;
+    }
+
+    img {
+        image-rendering:pixelated;
+    }
+
+    </style>
+
     <div style="
     overflow-x:auto;
     border-radius:16px;
-    border:1px solid #333;
+    border:1px solid #222;
     ">
 
-    <table style="
-    width:100%;
-    border-collapse:collapse;
-    font-size:14px;
-    text-align:center;
-    ">
+    <table>
 
-    <tr style="
-    background:#111827;
-    ">
+    <tr>
 
-    <th style="padding:10px;">
-    Rate
-    </th>
-
-    <th>
-    Player 1
-    </th>
-
-    <th>
-    Player 2
-    </th>
-
-    <th>
-    Result
-    </th>
-
-    <th>
-    Date
-    </th>
+    <th>Rate</th>
+    <th>Player 1</th>
+    <th>Player 2</th>
+    <th>Result</th>
+    <th>Date</th>
 
     </tr>
+
     """
 
     for replay in replays:
@@ -535,17 +581,13 @@ else:
             if winner == p1_name:
 
                 result = (
-                    '<span style="color:#22c55e;">'
-                    'WIN'
-                    '</span>'
+                    '<span style="color:#22c55e;">WIN</span>'
                 )
 
             else:
 
                 result = (
-                    '<span style="color:#ef4444;">'
-                    'LOSE'
-                    '</span>'
+                    '<span style="color:#ef4444;">LOSE</span>'
                 )
 
         else:
@@ -560,19 +602,17 @@ else:
 
         for mon in p1_team:
 
-            p1_icons += f'''
-            <img src="{icon_url(mon)}"
-            width="32">
-            '''
+            p1_icons += (
+                f'<img src="{icon_url(mon)}" width="32">'
+            )
 
         p2_icons = ""
 
         for mon in p2_team:
 
-            p2_icons += f'''
-            <img src="{icon_url(mon)}"
-            width="32">
-            '''
+            p2_icons += (
+                f'<img src="{icon_url(mon)}" width="32">'
+            )
 
         # =====================
         # ROW
@@ -582,17 +622,14 @@ else:
 
         <tr
         onclick="window.open('{replay_url}')"
-        style="
-        cursor:pointer;
-        border-top:1px solid #222;
-        "
+        style="cursor:pointer;"
         >
 
-        <td style="padding:10px;">
-        {rating}
+        <td>
+        <b>{rating}</b>
         </td>
 
-        <td style="padding:10px;">
+        <td>
 
         <div style="
         font-weight:bold;
@@ -607,7 +644,7 @@ else:
 
         </td>
 
-        <td style="padding:10px;">
+        <td>
 
         <div style="
         font-weight:bold;
@@ -635,7 +672,8 @@ else:
 
     table_html += "</table></div>"
 
-    st.markdown(
+    components.html(
         table_html,
-        unsafe_allow_html=True
+        height=2400,
+        scrolling=True
     )
