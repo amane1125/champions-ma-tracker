@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 # =========================
 
 st.set_page_config(
-    page_title="Champions M-A Tracker"
+    page_title="Champions M-A Tracker",
     layout="wide"
 )
 
