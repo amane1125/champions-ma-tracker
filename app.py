@@ -22,7 +22,7 @@ LADDER_URL = (
 )
 
 REPLAY_SEARCH_URL = (
-    "https://replay.pokemonshowdown.com/search/"
+    "https://replay.pokemonshowdown.com/search.json"
 )
 
 DB_PATH = "sqlite:///champions_ma.db"
@@ -34,6 +34,7 @@ engine = create_engine(DB_PATH)
 # =========================
 
 def save_ladder(df):
+
     df.to_sql(
         "ladder",
         engine,
@@ -42,15 +43,20 @@ def save_ladder(df):
     )
 
 def load_ladder():
+
     try:
+
         return pd.read_sql(
             "SELECT * FROM ladder ORDER BY Elo DESC",
             engine
         )
+
     except:
+
         return pd.DataFrame()
 
 def append_ladder_history(df):
+
     df["timestamp"] = datetime.now()
 
     df.to_sql(
@@ -61,6 +67,7 @@ def append_ladder_history(df):
     )
 
 def save_replays(df):
+
     df.to_sql(
         "replays",
         engine,
@@ -75,50 +82,66 @@ def save_replays(df):
 @st.cache_data(ttl=300)
 def fetch_ladder():
 
-    res = requests.get(LADDER_URL, timeout=20)
-    data = res.json()
+    try:
 
-    if isinstance(data, dict):
-        if "toplist" in data:
-            data = data["toplist"]
+        res = requests.get(
+            LADDER_URL,
+            timeout=20
+        )
 
-    rows = []
+        data = res.json()
 
-    for i, p in enumerate(data[:100], start=1):
+        if isinstance(data, dict):
 
-        wins = p.get("w", 0)
-        losses = p.get("l", 0)
+            if "toplist" in data:
+                data = data["toplist"]
 
-        total = wins + losses
+        rows = []
 
-        if total > 0:
-            winrate = round((wins / total) * 100, 1)
-        else:
-            winrate = 0
+        for i, p in enumerate(data[:100], start=1):
 
-        rows.append({
-            "Rank": i,
-            "Name": p.get("username", "Unknown"),
-            "Elo": p.get("elo", 0),
-            "Wins": wins,
-            "Losses": losses,
-            "Winrate": winrate
-        })
+            wins = p.get("w", 0)
+            losses = p.get("l", 0)
 
-    df = pd.DataFrame(rows)
+            total = wins + losses
 
-    save_ladder(df)
-    append_ladder_history(df)
+            if total > 0:
+                winrate = round(
+                    (wins / total) * 100,
+                    1
+                )
+            else:
+                winrate = 0
 
-    return df
+            rows.append({
+                "Rank": i,
+                "Name": p.get("username", "Unknown"),
+                "Elo": p.get("elo", 0),
+                "Wins": wins,
+                "Losses": losses,
+                "Winrate": winrate
+            })
+
+        df = pd.DataFrame(rows)
+
+        save_ladder(df)
+
+        append_ladder_history(df)
+
+        return df
+
+    except Exception as e:
+
+        st.error(f"Ladder取得失敗: {e}")
+
+        return pd.DataFrame()
 
 @st.cache_data(ttl=300)
 def fetch_replays(username):
 
     params = {
         "user": username,
-        "format": FORMAT_ID,
-        "output": "json"
+        "format": FORMAT_ID
     }
 
     try:
@@ -137,6 +160,7 @@ def fetch_replays(username):
         return data
 
     except:
+
         return []
 
 @st.cache_data(ttl=300)
@@ -149,7 +173,10 @@ def fetch_replay_log(replay_id):
 
     try:
 
-        r = requests.get(url, timeout=20)
+        r = requests.get(
+            url,
+            timeout=20
+        )
 
         if r.status_code != 200:
             return ""
@@ -157,6 +184,7 @@ def fetch_replay_log(replay_id):
         return r.text
 
     except:
+
         return ""
 
 # =========================
@@ -167,18 +195,22 @@ POKE_REGEX = r"\|poke\|p1\|([^,\n]+)"
 
 def extract_team(log_text):
 
-    mons = re.findall(POKE_REGEX, log_text)
+    mons = re.findall(
+        POKE_REGEX,
+        log_text
+    )
 
     unique = []
 
     for mon in mons:
+
         if mon not in unique:
             unique.append(mon)
 
     return unique[:6]
 
 # =========================
-# REPLAY DATE
+# LAST REPLAY DATE
 # =========================
 
 def get_last_replay_date(username):
@@ -197,18 +229,25 @@ def get_last_replay_date(username):
 
     try:
 
-        dt = datetime.fromtimestamp(uploadtime)
+        dt = datetime.fromtimestamp(
+            uploadtime
+        )
 
-        return dt.strftime("%Y-%m-%d")
+        return dt.strftime(
+            "%Y-%m-%d"
+        )
 
     except:
+
         return "Unknown"
 
 # =========================
-# LOAD DATA
+# MAIN
 # =========================
 
-st.title("[Gen 9 Champions] VGC 2026 Reg M-A")
+st.title(
+    "[Gen 9 Champions] VGC 2026 Reg M-A"
+)
 
 ladder_df = fetch_ladder()
 
@@ -224,10 +263,12 @@ if ladder_df.empty:
     ladder_df = cached
 
 # =========================
-# LAST REPLAY
+# LAST REPLAY COLUMN
 # =========================
 
-with st.spinner("Replay情報取得中..."):
+with st.spinner(
+    "Replay情報取得中..."
+):
 
     replay_dates = []
 
@@ -240,7 +281,7 @@ with st.spinner("Replay情報取得中..."):
     ladder_df["Last Replay"] = replay_dates
 
 # =========================
-# TOP TABLE
+# LADDER TABLE
 # =========================
 
 st.subheader("Top 100 Ladder")
@@ -270,9 +311,15 @@ st.header(selected_player)
 
 c1, c2, c3, c4 = st.columns(4)
 
-c1.metric("Rank", int(player_row["Rank"]))
+c1.metric(
+    "Rank",
+    int(player_row["Rank"])
+)
 
-c2.metric("Elo", int(player_row["Elo"]))
+c2.metric(
+    "Elo",
+    int(player_row["Elo"])
+)
 
 c3.metric(
     "Winrate",
@@ -285,10 +332,12 @@ c4.metric(
 )
 
 # =========================
-# REPLAYS
+# REPLAY LIST
 # =========================
 
-replays = fetch_replays(selected_player)
+replays = fetch_replays(
+    selected_player
+)
 
 st.subheader("Replay一覧")
 
@@ -302,7 +351,10 @@ else:
 
     for replay in replays:
 
-        replay_id = replay.get("id", "")
+        replay_id = replay.get(
+            "id",
+            ""
+        )
 
         if not replay_id:
             continue
@@ -312,23 +364,34 @@ else:
             f"{replay_id}"
         )
 
-        rating = replay.get("rating", "?")
+        rating = replay.get(
+            "rating",
+            "?"
+        )
 
-        uploadtime = replay.get("uploadtime")
+        uploadtime = replay.get(
+            "uploadtime"
+        )
 
         if uploadtime:
 
             date_text = datetime.fromtimestamp(
                 uploadtime
-            ).strftime("%Y-%m-%d %H:%M")
+            ).strftime(
+                "%Y-%m-%d %H:%M"
+            )
 
         else:
 
             date_text = "Unknown"
 
-        log_text = fetch_replay_log(replay_id)
+        log_text = fetch_replay_log(
+            replay_id
+        )
 
-        team = extract_team(log_text)
+        team = extract_team(
+            log_text
+        )
 
         replay_rows.append({
             "player": selected_player,
@@ -345,23 +408,33 @@ else:
                 f"### [{replay_id}]({replay_url})"
             )
 
-            st.write(f"**Rate:** {rating}")
+            st.write(
+                f"**Rate:** {rating}"
+            )
 
-            st.write(f"**Date:** {date_text}")
+            st.write(
+                f"**Date:** {date_text}"
+            )
 
             if len(team) > 0:
 
                 st.write("### Team")
 
-                st.write(" / ".join(team))
+                st.write(
+                    " / ".join(team)
+                )
 
             else:
 
-                st.write("構築取得失敗")
+                st.write(
+                    "構築取得失敗"
+                )
 
     if len(replay_rows) > 0:
 
-        replay_df = pd.DataFrame(replay_rows)
+        replay_df = pd.DataFrame(
+            replay_rows
+        )
 
         save_replays(replay_df)
 
@@ -376,12 +449,12 @@ st.subheader("レート履歴")
 try:
 
     history_df = pd.read_sql(
-        f"""
+        f'''
         SELECT *
         FROM ladder_history
-        WHERE Name = '{selected_player}'
+        WHERE Name = "{selected_player}"
         ORDER BY timestamp
-        """,
+        ''',
         engine
     )
 
