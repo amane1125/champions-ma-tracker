@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 import requests
 import re
@@ -10,8 +9,7 @@ from datetime import datetime, timezone
 # =========================
 
 st.set_page_config(
-    page_title="Champions M-A Tracker",
-    page_icon="🎮",
+    page_title="Champions M-A Tracker"
     layout="wide"
 )
 
@@ -272,79 +270,19 @@ if not player:
             )
         ]
 
-    # =====================
-    # TABLE
-    # =====================
+    st.divider()
 
-    html = """
+    header = st.columns(
+        [1, 4, 2, 2, 3]
+    )
 
-    <style>
+    header[0].markdown("### #")
+    header[1].markdown("### Player")
+    header[2].markdown("### Elo")
+    header[3].markdown("### GXE")
+    header[4].markdown("### Latest")
 
-    body {
-        background:#0f172a;
-        color:white;
-        margin:0;
-        padding:0;
-        font-family:sans-serif;
-    }
-
-    table {
-        width:100%;
-        border-collapse:collapse;
-        font-size:14px;
-        text-align:center;
-    }
-
-    th {
-        background:#111827;
-        padding:12px;
-        position:sticky;
-        top:0;
-        z-index:1;
-    }
-
-    td {
-        padding:12px;
-        border-top:1px solid #222;
-    }
-
-    tr:hover {
-        background:#1f2937;
-    }
-
-    .playerbtn {
-        background:#2563eb;
-        color:white;
-        padding:8px 14px;
-        border-radius:10px;
-        text-decoration:none;
-        font-weight:bold;
-        display:inline-block;
-    }
-
-    .playerbtn:hover {
-        background:#3b82f6;
-    }
-
-    </style>
-
-    <div style="
-    overflow-x:auto;
-    border-radius:16px;
-    border:1px solid #222;
-    ">
-
-    <table>
-
-    <tr>
-    <th>#</th>
-    <th>Player</th>
-    <th>Elo</th>
-    <th>GXE</th>
-    <th>Latest Replay</th>
-    </tr>
-
-    """
+    st.divider()
 
     for _, row in ladder_df.iterrows():
 
@@ -354,67 +292,52 @@ if not player:
             )
         )
 
-        replay_color = "#22c55e"
+        cols = st.columns(
+            [1, 4, 2, 2, 3]
+        )
+
+        cols[0].markdown(
+            f"### {row['Rank']}"
+        )
+
+        if cols[1].button(
+            f"{status} {row['Name']}",
+            key=row["Name"],
+            use_container_width=True
+        ):
+
+            st.query_params["player"] = (
+                row["Name"]
+            )
+
+            st.rerun()
+
+        cols[2].metric(
+            "",
+            row["Elo"]
+        )
+
+        cols[3].metric(
+            "",
+            row["GXE"]
+        )
+
+        replay_color = "🟢"
 
         if diff > 7:
-            replay_color = "#ef4444"
+            replay_color = "🔴"
 
         elif diff > 1:
-            replay_color = "#facc15"
+            replay_color = "🟡"
 
-        html += f"""
+        cols[4].markdown(
+            f"""
+            ### {replay_color}
+            {replay_date}
+            """
+        )
 
-        <tr>
-
-        <td>
-        #{row['Rank']}
-        </td>
-
-        <td>
-
-        <a
-        class="playerbtn"
-        href="/?player={row['Name']}"
-        target="_top"
-        >
-
-        {status} {row['Name']}
-
-        </a>
-
-        </td>
-
-        <td>
-        <b>{row['Elo']}</b>
-        </td>
-
-        <td>
-        {row['GXE']}
-        </td>
-
-        <td>
-
-        <span style="
-        color:{replay_color};
-        font-weight:bold;
-        ">
-
-        {replay_date}
-
-        </span>
-
-        </td>
-
-        </tr>
-        """
-
-    html += "</table></div>"
-
-    components.html(
-        html,
-        height=2200,
-        scrolling=True
-    )
+        st.divider()
 
 # =========================
 # PLAYER PAGE
@@ -422,22 +345,11 @@ if not player:
 
 else:
 
-    st.markdown(f"""
-    <a href="/" target="_top">
-    <button style="
-    padding:8px 16px;
-    border-radius:10px;
-    border:none;
-    background:#2563eb;
-    color:white;
-    font-weight:bold;
-    cursor:pointer;
-    margin-bottom:10px;
-    ">
-    ← Back
-    </button>
-    </a>
-    """, unsafe_allow_html=True)
+    if st.button("← Back"):
+
+        st.query_params.clear()
+
+        st.rerun()
 
     st.title(player)
 
@@ -454,72 +366,26 @@ else:
         st.stop()
 
     # =====================
-    # TABLE
+    # TABLE HEADER
     # =====================
 
-    table_html = """
+    header = st.columns(
+        [1, 4, 4, 2, 2]
+    )
 
-    <style>
+    header[0].markdown("### Rate")
+    header[1].markdown("### Player 1")
+    header[2].markdown("### Player 2")
+    header[3].markdown("### Result")
+    header[4].markdown("### Date")
 
-    body {
-        background:#0f172a;
-        color:white;
-        margin:0;
-        padding:0;
-        font-family:sans-serif;
-    }
+    st.divider()
 
-    table {
-        width:100%;
-        border-collapse:collapse;
-        font-size:14px;
-        text-align:center;
-    }
+    # =====================
+    # REPLAYS
+    # =====================
 
-    th {
-        background:#111827;
-        padding:10px;
-        position:sticky;
-        top:0;
-        z-index:1;
-    }
-
-    td {
-        padding:10px;
-        border-top:1px solid #222;
-    }
-
-    tr:hover {
-        background:#1f2937;
-    }
-
-    img {
-        image-rendering:pixelated;
-    }
-
-    </style>
-
-    <div style="
-    overflow-x:auto;
-    border-radius:16px;
-    border:1px solid #222;
-    ">
-
-    <table>
-
-    <tr>
-
-    <th>Rate</th>
-    <th>Player 1</th>
-    <th>Player 2</th>
-    <th>Result</th>
-    <th>Date</th>
-
-    </tr>
-
-    """
-
-    for replay in replays:
+    for i, replay in enumerate(replays):
 
         replay_id = replay.get(
             "id",
@@ -596,26 +462,26 @@ else:
 
             if winner == player:
 
-                result = (
-                    '<span style="color:#22c55e;font-weight:bold;">WIN</span>'
-                )
+                result = "🟢 WIN"
 
             else:
 
-                result = (
-                    '<span style="color:#ef4444;font-weight:bold;">LOSE</span>'
-                )
+                result = "🔴 LOSE"
 
         else:
 
             result = "-"
+
+        # =====================
+        # ICONS
+        # =====================
 
         p1_icons = ""
 
         for mon in p1_team:
 
             p1_icons += (
-                f'<img src="{icon_url(mon)}" width="32">'
+                f'<img src="{icon_url(mon)}" width="28">'
             )
 
         p2_icons = ""
@@ -623,65 +489,52 @@ else:
         for mon in p2_team:
 
             p2_icons += (
-                f'<img src="{icon_url(mon)}" width="32">'
+                f'<img src="{icon_url(mon)}" width="28">'
             )
 
-        table_html += f"""
+        cols = st.columns(
+            [1, 4, 4, 2, 2]
+        )
 
-        <tr
-        onclick="window.open('{replay_url}')"
-        style="cursor:pointer;"
-        >
+        cols[0].markdown(
+            f"### {rating}"
+        )
 
-        <td>
-        <b>{rating}</b>
-        </td>
+        cols[1].markdown(
+            f"""
+            **{p1_name}**
 
-        <td>
+            {p1_icons}
+            """,
+            unsafe_allow_html=True
+        )
 
-        <div style="
-        font-weight:bold;
-        margin-bottom:6px;
-        ">
-        {p1_name}
-        </div>
+        cols[2].markdown(
+            f"""
+            **{p2_name}**
 
-        <div>
-        {p1_icons}
-        </div>
+            {p2_icons}
+            """,
+            unsafe_allow_html=True
+        )
 
-        </td>
+        cols[3].markdown(
+            f"### {result}"
+        )
 
-        <td>
+        cols[4].markdown(
+            f"### {date_text}"
+        )
 
-        <div style="
-        font-weight:bold;
-        margin-bottom:6px;
-        ">
-        {p2_name}
-        </div>
+        if st.button(
+            "Open Replay",
+            key=f"replay_{i}",
+            use_container_width=True
+        ):
 
-        <div>
-        {p2_icons}
-        </div>
+            st.link_button(
+                "Go",
+                replay_url
+            )
 
-        </td>
-
-        <td>
-        {result}
-        </td>
-
-        <td>
-        {date_text}
-        </td>
-
-        </tr>
-        """
-
-    table_html += "</table></div>"
-
-    components.html(
-        table_html,
-        height=2400,
-        scrolling=True
-    )
+        st.divider()
