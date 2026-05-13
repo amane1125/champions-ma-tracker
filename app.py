@@ -280,6 +280,14 @@ if not player:
 
     <style>
 
+    body {
+        background:#0f172a;
+        color:white;
+        margin:0;
+        padding:0;
+        font-family:sans-serif;
+    }
+
     table {
         width:100%;
         border-collapse:collapse;
@@ -314,9 +322,8 @@ if not player:
         display:inline-block;
     }
 
-    .small {
-        font-size:12px;
-        opacity:0.8;
+    .playerbtn:hover {
+        background:#3b82f6;
     }
 
     </style>
@@ -334,7 +341,7 @@ if not player:
     <th>Player</th>
     <th>Elo</th>
     <th>GXE</th>
-    <th>Replay</th>
+    <th>Latest Replay</th>
     </tr>
 
     """
@@ -367,8 +374,8 @@ if not player:
 
         <a
         class="playerbtn"
-        href="?player={row['Name']}"
-        target="_self"
+        href="/?player={row['Name']}"
+        target="_top"
         >
 
         {status} {row['Name']}
@@ -415,15 +422,24 @@ if not player:
 
 else:
 
-    top1, top2 = st.columns([1, 5])
+    st.markdown(f"""
+    <a href="/" target="_top">
+    <button style="
+    padding:8px 16px;
+    border-radius:10px;
+    border:none;
+    background:#2563eb;
+    color:white;
+    font-weight:bold;
+    cursor:pointer;
+    margin-bottom:10px;
+    ">
+    ← Back
+    </button>
+    </a>
+    """, unsafe_allow_html=True)
 
-    if top1.button("← Back"):
-
-        st.query_params.clear()
-
-        st.rerun()
-
-    top2.title(player)
+    st.title(player)
 
     replays = fetch_replays(player)
 
@@ -444,6 +460,14 @@ else:
     table_html = """
 
     <style>
+
+    body {
+        background:#0f172a;
+        color:white;
+        margin:0;
+        padding:0;
+        font-family:sans-serif;
+    }
 
     table {
         width:100%;
@@ -539,10 +563,6 @@ else:
             log_text
         )
 
-        # =====================
-        # PLAYER NAMES
-        # =====================
-
         p1_name_match = re.search(
             r"\|player\|p1\|([^\n]+)",
             log_text
@@ -565,10 +585,6 @@ else:
             else "P2"
         )
 
-        # =====================
-        # WINNER
-        # =====================
-
         win_match = re.search(
             r"\|win\|([^\n]+)",
             log_text
@@ -578,25 +594,21 @@ else:
 
             winner = win_match.group(1)
 
-            if winner == p1_name:
+            if winner == player:
 
                 result = (
-                    '<span style="color:#22c55e;">WIN</span>'
+                    '<span style="color:#22c55e;font-weight:bold;">WIN</span>'
                 )
 
             else:
 
                 result = (
-                    '<span style="color:#ef4444;">LOSE</span>'
+                    '<span style="color:#ef4444;font-weight:bold;">LOSE</span>'
                 )
 
         else:
 
             result = "-"
-
-        # =====================
-        # ICONS
-        # =====================
 
         p1_icons = ""
 
@@ -613,10 +625,6 @@ else:
             p2_icons += (
                 f'<img src="{icon_url(mon)}" width="32">'
             )
-
-        # =====================
-        # ROW
-        # =====================
 
         table_html += f"""
 
