@@ -2,13 +2,67 @@ import streamlit as st
 import pandas as pd
 import requests
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import create_engine
 
+# =========================
+# PAGE
+# =========================
+
 st.set_page_config(
-    page_title="Champions M-A Ladder",
+    page_title="Champions M-A Tracker",
+    page_icon="🎮",
     layout="wide"
 )
+
+# =========================
+# STYLE
+# =========================
+
+st.markdown("""
+<style>
+
+.block-container {
+    padding-top: 1.5rem;
+}
+
+div[data-testid="stVerticalBlock"] > div:has(div.replay-card) {
+    border-radius: 18px;
+}
+
+.replay-card {
+    padding: 12px;
+    border-radius: 16px;
+    background-color: #111827;
+    margin-bottom: 14px;
+    border: 1px solid #1f2937;
+}
+
+.player-card {
+    padding: 10px;
+    border-radius: 14px;
+    background-color: #111827;
+    margin-bottom: 8px;
+    border: 1px solid #1f2937;
+}
+
+.good {
+    color: #22c55e;
+    font-weight: bold;
+}
+
+.bad {
+    color: #ef4444;
+    font-weight: bold;
+}
+
+.small {
+    font-size: 0.9rem;
+    opacity: 0.8;
+}
+
+</style>
+""", unsafe_allow_html=True)
 
 # =========================
 # CONFIG
@@ -28,32 +82,6 @@ REPLAY_SEARCH_URL = (
 engine = create_engine(
     "sqlite:///champions_ma.db"
 )
-
-# =========================
-# DB
-# =========================
-
-def save_ladder(df):
-
-    df.to_sql(
-        "ladder",
-        engine,
-        if_exists="replace",
-        index=False
-    )
-
-def load_cached_ladder():
-
-    try:
-
-        return pd.read_sql(
-            "SELECT * FROM ladder ORDER BY Elo DESC",
-            engine
-        )
-
-    except:
-
-        return pd.DataFrame()
 
 # =========================
 # API
@@ -85,11 +113,7 @@ def fetch_ladder():
             "GXE": p.get("gxe", 0)
         })
 
-    df = pd.DataFrame(rows)
-
-    save_ladder(df)
-
-    return df
+    return pd.DataFrame(rows)
 
 @st.cache_data(ttl=300)
 def fetch_replays(username):
@@ -143,7 +167,7 @@ def fetch_log(replay_id):
         return ""
 
 # =========================
-# TEAM EXTRACTION
+# TEAM
 # =========================
 
 P1_REGEX = r"\|poke\|p1\|([^,\n]+)"
@@ -180,7 +204,7 @@ def extract_teams(log_text):
     )
 
 # =========================
-# ICON URL
+# ICON
 # =========================
 
 def clean_name(name):
@@ -212,6 +236,59 @@ def icon_url(name):
     )
 
 # =========================
+# LAST REPLAY
+# =========================
+
+def latest_replay_info(name):
+
+    replays = fetch_replays(name)
+
+    if len(replays) == 0:
+
+        return (
+            "❌",
+            "No Replay"
+        )
+
+    latest = replays[0]
+
+    uploadtime = latest.get(
+        "uploadtime"
+    )
+
+    if not uploadtime:
+
+        return (
+            "⚪",
+            "Unknown"
+        )
+
+    dt = datetime.fromtimestamp(
+        uploadtime,
+        tz=timezone.utc
+    )
+
+    now = datetime.now(
+        timezone.utc
+    )
+
+    diff = (now - dt).days
+
+    if diff <= 1:
+        status = "🟢"
+
+    elif diff <= 7:
+        status = "🟡"
+
+    else:
+        status = "🔴"
+
+    return (
+        status,
+        dt.strftime("%Y-%m-%d")
+    )
+
+# =========================
 # PLAYER QUERY
 # =========================
 
@@ -227,25 +304,17 @@ player = st.query_params.get(
 if not player:
 
     st.title(
+        "🎮 Champions M-A Tracker"
+    )
+
+    st.caption(
         "[Gen 9 Champions] VGC 2026 Reg M-A"
     )
 
-    try:
-
-        ladder_df = fetch_ladder()
-
-    except:
-
-        ladder_df = load_cached_ladder()
-
-    if ladder_df.empty:
-
-        st.error("Ladder取得失敗")
-
-        st.stop()
+    ladder_df = fetch_ladder()
 
     search = st.text_input(
-        "プレイヤー検索"
+        "🔍 プレイヤー検索"
     )
 
     if search:
@@ -258,37 +327,65 @@ if not player:
             )
         ]
 
-    st.subheader("Top 100 Ladder")
+    st.divider()
 
     for _, row in ladder_df.iterrows():
 
-        c1, c2, c3, c4 = st.columns(
-            [1, 5, 2, 2]
+        status, replay_date = latest_replay_info(
+            row["Name"]
         )
 
-        c1.write(
-            f"#{row['Rank']}"
-        )
+        with st.container():
 
-        if c2.button(
-            row["Name"],
-            key=row["Name"],
-            use_container_width=True
-        ):
-
-            st.query_params["player"] = (
-                row["Name"]
+            st.markdown(
+                '<div class="player-card">',
+                unsafe_allow_html=True
             )
 
-            st.rerun()
+            c1, c2, c3, c4, c5 = st.columns(
+                [1, 4, 2, 2, 2]
+            )
 
-        c3.write(
-            f"{row['Elo']}"
-        )
+            c1.markdown(
+                f"### #{row['Rank']}"
+            )
 
-        c4.write(
-            f"GXE {row['GXE']}"
-        )
+            if c2.button(
+                f"{status} {row['Name']}",
+                key=row["Name"],
+                use_container_width=True
+            ):
+
+                st.query_params["player"] = (
+                    row["Name"]
+                )
+
+                st.rerun()
+
+            c3.metric(
+                "Elo",
+                int(row["Elo"])
+            )
+
+            c4.metric(
+                "GXE",
+                row["GXE"]
+            )
+
+            c5.markdown(
+                f"""
+                <div class="small">
+                Latest Replay<br>
+                <b>{replay_date}</b>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+            st.markdown(
+                "</div>",
+                unsafe_allow_html=True
+            )
 
 # =========================
 # PLAYER VIEW
@@ -308,7 +405,11 @@ else:
 
     replays = fetch_replays(player)
 
-    st.subheader("Replay一覧")
+    st.caption(
+        f"{len(replays)} Public Replays"
+    )
+
+    st.divider()
 
     if len(replays) == 0:
 
@@ -345,7 +446,7 @@ else:
             date_text = datetime.fromtimestamp(
                 uploadtime
             ).strftime(
-                "%Y-%m-%d"
+                "%Y-%m-%d %H:%M"
             )
 
         else:
@@ -360,42 +461,69 @@ else:
             log_text
         )
 
-        with st.container(border=True):
+        st.markdown(
+            '<div class="replay-card">',
+            unsafe_allow_html=True
+        )
 
-            st.link_button(
-                f"Rate {rating} | {date_text}",
-                replay_url,
-                use_container_width=True
-            )
+        c1, c2, c3 = st.columns(
+            [3, 2, 2]
+        )
 
-            st.write("### P1")
+        c1.link_button(
+            "▶ Open Replay",
+            replay_url,
+            use_container_width=True
+        )
 
-            cols = st.columns(6)
+        c2.metric(
+            "Rate",
+            rating
+        )
 
-            for i, mon in enumerate(p1_team):
+        c3.markdown(
+            f"""
+            <div class="small">
+            Date<br>
+            <b>{date_text}</b>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
-                if i >= 6:
-                    break
+        st.write("### P1")
 
-                with cols[i]:
+        cols = st.columns(6)
 
-                    st.image(
-                        icon_url(mon),
-                        width=52
-                    )
+        for i, mon in enumerate(p1_team):
 
-            st.write("### P2")
+            if i >= 6:
+                break
 
-            cols2 = st.columns(6)
+            with cols[i]:
 
-            for i, mon in enumerate(p2_team):
+                st.image(
+                    icon_url(mon),
+                    width=54
+                )
 
-                if i >= 6:
-                    break
+        st.write("### P2")
 
-                with cols2[i]:
+        cols2 = st.columns(6)
 
-                    st.image(
-                        icon_url(mon),
-                        width=52
-                    )
+        for i, mon in enumerate(p2_team):
+
+            if i >= 6:
+                break
+
+            with cols2[i]:
+
+                st.image(
+                    icon_url(mon),
+                    width=54
+                )
+
+        st.markdown(
+            "</div>",
+            unsafe_allow_html=True
+        )
