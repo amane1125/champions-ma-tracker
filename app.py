@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import requests
 import re
+import time
+import urllib.parse
 from datetime import datetime, timezone
 
 # =========================
@@ -29,6 +31,8 @@ REPLAY_SEARCH_URL = (
     "https://replay.pokemonshowdown.com/search.json"
 )
 
+PAGE_SIZE = 50
+
 # =========================
 # API
 # =========================
@@ -50,7 +54,6 @@ def fetch_ladder():
 
     rows = []
 
-    # TOP500
     for i, p in enumerate(data[:500], start=1):
 
         rows.append({
@@ -65,6 +68,8 @@ def fetch_ladder():
 @st.cache_data(ttl=300)
 def fetch_replays(username):
 
+    time.sleep(0.15)
+
     try:
 
         r = requests.get(
@@ -75,6 +80,19 @@ def fetch_replays(username):
             },
             timeout=20
         )
+
+        if r.status_code == 429:
+
+            time.sleep(1)
+
+            r = requests.get(
+                REPLAY_SEARCH_URL,
+                params={
+                    "user": username,
+                    "format": FORMAT_ID
+                },
+                timeout=20
+            )
 
         data = r.json()
 
@@ -87,7 +105,7 @@ def fetch_replays(username):
 
         return []
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=3600)
 def fetch_log(replay_id):
 
     try:
@@ -105,6 +123,43 @@ def fetch_log(replay_id):
     except:
 
         return ""
+
+# =========================
+# ICON FIX
+# =========================
+
+ICON_FIXES = {
+
+    "urshifu-rapid-strike":
+        "urshifurapidstrike",
+
+    "urshifu-single-strike":
+        "urshifu",
+
+    "indeedee-f":
+        "indeedeef",
+
+    "ogerpon-wellspring":
+        "ogerponwellspring",
+
+    "ogerpon-hearthflame":
+        "ogerponhearthflame",
+
+    "ogerpon-cornerstone":
+        "ogerponcornerstone",
+
+    "tornadus-therian":
+        "tornadustherian",
+
+    "landorus-therian":
+        "landorustherian",
+
+    "thundurus-therian":
+        "thundurustherian",
+
+    "enamorus-therian":
+        "enamorustherian"
+}
 
 # =========================
 # TEAM
@@ -134,6 +189,9 @@ def extract_teams(log_text):
 def clean_name(name):
 
     name = name.lower()
+
+    if name in ICON_FIXES:
+        return ICON_FIXES[name]
 
     for c in [
         " ",
@@ -242,6 +300,38 @@ if not player:
         value=False
     )
 
+    page = st.segmented_control(
+        "Page",
+        options=[
+            "1-50",
+            "51-100",
+            "101-150",
+            "151-200",
+            "201-250",
+            "251-300",
+            "301-350",
+            "351-400",
+            "401-450",
+            "451-500"
+        ],
+        default="1-50"
+    )
+
+    start_rank = int(
+        page.split("-")[0]
+    )
+
+    start_idx = start_rank - 1
+
+    end_idx = (
+        start_idx
+        + PAGE_SIZE
+    )
+
+    ladder_df = ladder_df.iloc[
+        start_idx:end_idx
+    ]
+
     if search:
 
         ladder_df = ladder_df[
@@ -252,7 +342,13 @@ if not player:
             )
         ]
 
-    display_rows = []
+    st.caption(
+        f"{len(ladder_df)} players"
+    )
+
+    # =====================
+    # ROWS
+    # =====================
 
     for _, row in ladder_df.iterrows():
 
@@ -268,72 +364,60 @@ if not player:
         ):
             continue
 
-        display_rows.append({
+        with st.container(border=True):
 
-            "Rank":
-                row["Rank"],
+            c1, c2, c3, c4, c5 = st.columns(
+                [1, 4, 2, 2, 2]
+            )
 
-            "Player":
+            c1.markdown(
+                f"### #{row['Rank']}"
+            )
+
+            if c2.button(
                 f"{status} {row['Name']}",
+                key=f"player_{row['Name']}",
+                use_container_width=True
+            ):
 
-            "Elo":
-                row["Elo"],
+                st.query_params["player"] = (
+                    urllib.parse.quote(
+                        row["Name"]
+                    )
+                )
 
-            "GXE":
-                row["GXE"],
+                st.rerun()
 
-            "Latest":
-                replay_date
-        })
+            c3.markdown(
+                f"""
+                **Elo**  
+                {row['Elo']}
+                """
+            )
 
-    display_df = pd.DataFrame(
-        display_rows
-    )
+            c4.markdown(
+                f"""
+                **GXE**  
+                {row['GXE']}
+                """
+            )
 
-    st.caption(
-        f"{len(display_df)} players"
-    )
-
-    selected = st.dataframe(
-        display_df,
-        use_container_width=True,
-        hide_index=True,
-        on_select="rerun",
-        selection_mode="single-row"
-    )
-
-    if (
-        selected
-        and len(
-            selected.selection.rows
-        ) > 0
-    ):
-
-        idx = selected.selection.rows[0]
-
-        visible_name = (
-            display_df.iloc[idx]["Player"]
-        )
-
-        player_name = (
-            visible_name
-            .replace("🟢 ", "")
-            .replace("🟡 ", "")
-            .replace("🔴 ", "")
-            .replace("❌ ", "")
-        )
-
-        st.query_params["player"] = (
-            player_name
-        )
-
-        st.rerun()
+            c5.markdown(
+                f"""
+                **Latest**  
+                {replay_date}
+                """
+            )
 
 # =========================
 # PLAYER PAGE
 # =========================
 
 else:
+
+    player = urllib.parse.unquote(
+        player
+    )
 
     if st.button("← Back"):
 
@@ -353,6 +437,22 @@ else:
 
         st.info("Replayなし")
         st.stop()
+
+    # =====================
+    # LIMIT
+    # =====================
+
+    replay_limit = st.selectbox(
+        "Replay Count",
+        [10, 20, 50],
+        index=0
+    )
+
+    replays = replays[:replay_limit]
+
+    # =====================
+    # REPLAYS
+    # =====================
 
     for replay in replays:
 
@@ -390,151 +490,93 @@ else:
 
             date_text = "?"
 
-        log_text = fetch_log(
-            replay_id
-        )
+        # =====================
+        # LAZY LOAD LOG
+        # =====================
 
-        p1_team, p2_team = extract_teams(
-            log_text
-        )
+        with st.container(border=True):
 
-        p1_name_match = re.search(
-            r"\|player\|p1\|([^\n]+)",
-            log_text
-        )
-
-        p2_name_match = re.search(
-            r"\|player\|p2\|([^\n]+)",
-            log_text
-        )
-
-        p1_name = (
-            p1_name_match.group(1)
-            if p1_name_match
-            else "P1"
-        )
-
-        p2_name = (
-            p2_name_match.group(1)
-            if p2_name_match
-            else "P2"
-        )
-
-        win_match = re.search(
-            r"\|win\|([^\n]+)",
-            log_text
-        )
-
-        if win_match:
-
-            winner = win_match.group(1)
-
-            result = (
-                "🟢"
-                if winner == player
-                else "🔴"
+            top1, top2, top3 = st.columns(
+                [2, 1, 1]
             )
 
-        else:
-
-            result = "⚪"
-
-        p1_icons = ""
-
-        for mon in p1_team:
-
-            p1_icons += (
-                f'<img src="{icon_url(mon)}" width="26">'
+            top1.markdown(
+                f"### {rating}"
             )
 
-        p2_icons = ""
-
-        for mon in p2_team:
-
-            p2_icons += (
-                f'<img src="{icon_url(mon)}" width="26">'
+            top2.markdown(
+                f"### {date_text}"
             )
 
-        st.markdown(
-            f"""
-            <a
-            href="{replay_url}"
-            target="_blank"
-            style="
-            text-decoration:none;
-            color:inherit;
-            "
-            >
+            st.link_button(
+                "Open",
+                replay_url,
+                use_container_width=True
+            )
 
-            <div style="
-            border:1px solid #333;
-            border-radius:12px;
-            padding:10px;
-            margin-bottom:10px;
-            background:#111827;
-            ">
+            if st.button(
+                "Show Teams",
+                key=f"teams_{replay_id}",
+                use_container_width=True
+            ):
 
-            <div style="
-            display:flex;
-            justify-content:space-between;
-            align-items:center;
-            margin-bottom:6px;
-            color:white;
-            ">
+                log_text = fetch_log(
+                    replay_id
+                )
 
-            <div style="
-            font-weight:bold;
-            font-size:18px;
-            ">
-            {rating}
-            </div>
+                p1_team, p2_team = extract_teams(
+                    log_text
+                )
 
-            <div>
-            {result}
-            </div>
+                p1_name_match = re.search(
+                    r"\|player\|p1\|([^\n]+)",
+                    log_text
+                )
 
-            <div>
-            {date_text}
-            </div>
+                p2_name_match = re.search(
+                    r"\|player\|p2\|([^\n]+)",
+                    log_text
+                )
 
-            </div>
+                p1_name = (
+                    p1_name_match.group(1)
+                    if p1_name_match
+                    else "P1"
+                )
 
-            <div style="
-            margin-bottom:8px;
-            color:white;
-            ">
+                p2_name = (
+                    p2_name_match.group(1)
+                    if p2_name_match
+                    else "P2"
+                )
 
-            <div style="
-            font-size:14px;
-            font-weight:bold;
-            margin-bottom:4px;
-            ">
-            {p1_name}
-            </div>
+                p1_icons = ""
 
-            {p1_icons}
+                for mon in p1_team:
 
-            </div>
+                    p1_icons += (
+                        f'<img src="{icon_url(mon)}" width="28">'
+                    )
 
-            <div style="
-            color:white;
-            ">
+                p2_icons = ""
 
-            <div style="
-            font-size:14px;
-            font-weight:bold;
-            margin-bottom:4px;
-            ">
-            {p2_name}
-            </div>
+                for mon in p2_team:
 
-            {p2_icons}
+                    p2_icons += (
+                        f'<img src="{icon_url(mon)}" width="28">'
+                    )
 
-            </div>
+                st.markdown(
+                    f"""
+                    **{p1_name}**
 
-            </div>
+                    {p1_icons}
 
-            </a>
-            """,
-            unsafe_allow_html=True
-        )
+                    vs
+
+                    **{p2_name}**
+
+                    {p2_icons}
+                    """,
+                    unsafe_allow_html=True
+                )
