@@ -66,29 +66,38 @@ conn.commit()
 # STYLE
 # =====================================
 
-st.markdown("""
+st.html("""
 <style>
 
 html, body, [class*="css"] {
     font-family: sans-serif;
 }
 
+.block-container {
+    padding-top: 1rem;
+    padding-bottom: 4rem;
+    max-width: 900px;
+}
+
 a {
     text-decoration: none !important;
 }
 
-.ladder-row:hover {
-    background: #1f2937 !important;
+.ladder-row {
     transition: 0.15s;
 }
 
-.block-container {
-    padding-top: 1rem;
-    padding-bottom: 4rem;
+.ladder-row:hover {
+    transform: scale(1.01);
+    border-color: #3b82f6 !important;
+}
+
+.replay-card:hover {
+    border-color: #3b82f6 !important;
 }
 
 </style>
-""", unsafe_allow_html=True)
+""")
 
 # =====================================
 # HEADER
@@ -123,8 +132,7 @@ def fetch_ladder():
     data = r.json()
 
     if isinstance(data, dict):
-        if "toplist" in data:
-            data = data["toplist"]
+        data = data.get("toplist", [])
 
     rows = []
 
@@ -134,7 +142,7 @@ def fetch_ladder():
             "Rank": i,
             "Name": p.get("username", "Unknown"),
             "Elo": int(p.get("elo", 0)),
-            "GXE": p.get("gxe", 0)
+            "GXE": round(p.get("gxe", 0), 1)
         })
 
     return pd.DataFrame(rows)
@@ -142,7 +150,7 @@ def fetch_ladder():
 @st.cache_data(ttl=300)
 def fetch_replays(username):
 
-    time.sleep(0.1)
+    time.sleep(0.05)
 
     try:
 
@@ -154,19 +162,6 @@ def fetch_replays(username):
             },
             timeout=20
         )
-
-        if r.status_code == 429:
-
-            time.sleep(1)
-
-            r = requests.get(
-                REPLAY_SEARCH_URL,
-                params={
-                    "user": username,
-                    "format": FORMAT_ID
-                },
-                timeout=20
-            )
 
         data = r.json()
 
@@ -190,10 +185,10 @@ def fetch_log(replay_id):
         if r.status_code == 200:
             return r.text
 
-        return ""
-
     except:
-        return ""
+        pass
+
+    return ""
 
 # =====================================
 # ICON FIX
@@ -233,28 +228,7 @@ ICON_FIXES = {
 }
 
 # =====================================
-# TEAM PARSE
-# =====================================
-
-def extract_teams(log_text):
-
-    p1 = re.findall(
-        r"\|poke\|p1\|([^,\n]+)",
-        log_text
-    )
-
-    p2 = re.findall(
-        r"\|poke\|p2\|([^,\n]+)",
-        log_text
-    )
-
-    return (
-        list(dict.fromkeys(p1))[:6],
-        list(dict.fromkeys(p2))[:6]
-    )
-
-# =====================================
-# ICON URL
+# UTIL
 # =====================================
 
 def clean_name(name):
@@ -283,8 +257,25 @@ def icon_url(name):
         f"sprites/gen5/{clean_name(name)}.png"
     )
 
+def extract_teams(log_text):
+
+    p1 = re.findall(
+        r"\|poke\|p1\|([^,\n]+)",
+        log_text
+    )
+
+    p2 = re.findall(
+        r"\|poke\|p2\|([^,\n]+)",
+        log_text
+    )
+
+    return (
+        list(dict.fromkeys(p1))[:6],
+        list(dict.fromkeys(p2))[:6]
+    )
+
 # =====================================
-# CACHE REPLAY
+# CACHE
 # =====================================
 
 def cache_replay(replay):
@@ -297,9 +288,7 @@ def cache_replay(replay):
     WHERE replay_id = ?
     """, (replay_id,))
 
-    exists = cur.fetchone()
-
-    if exists:
+    if cur.fetchone():
         return
 
     log_text = fetch_log(replay_id)
@@ -311,12 +300,12 @@ def cache_replay(replay):
         log_text
     )
 
-    p1_name_match = re.search(
+    p1_match = re.search(
         r"\|player\|p1\|([^\n]+)",
         log_text
     )
 
-    p2_name_match = re.search(
+    p2_match = re.search(
         r"\|player\|p2\|([^\n]+)",
         log_text
     )
@@ -326,20 +315,9 @@ def cache_replay(replay):
         log_text
     )
 
-    p1 = (
-        p1_name_match.group(1)
-        if p1_name_match else ""
-    )
-
-    p2 = (
-        p2_name_match.group(1)
-        if p2_name_match else ""
-    )
-
-    winner = (
-        win_match.group(1)
-        if win_match else ""
-    )
+    p1 = p1_match.group(1) if p1_match else ""
+    p2 = p2_match.group(1) if p2_match else ""
+    winner = win_match.group(1) if win_match else ""
 
     cur.execute("""
     INSERT OR REPLACE INTO replay_cache
@@ -368,11 +346,7 @@ def latest_replay_info(name):
     replays = fetch_replays(name)
 
     if not replays:
-        return (
-            "❌",
-            "NoReplay",
-            999
-        )
+        return "❌", "None"
 
     latest = replays[0]
 
@@ -381,11 +355,7 @@ def latest_replay_info(name):
     )
 
     if not uploadtime:
-        return (
-            "⚪",
-            "Unknown",
-            999
-        )
+        return "⚪", "?"
 
     dt = datetime.fromtimestamp(
         uploadtime,
@@ -406,11 +376,7 @@ def latest_replay_info(name):
     else:
         status = "🔴"
 
-    return (
-        status,
-        dt.strftime("%m/%d"),
-        diff
-    )
+    return status, dt.strftime("%m/%d")
 
 # =====================================
 # QUERY PARAM
@@ -429,20 +395,24 @@ if not player:
 
     ladder_df = fetch_ladder()
 
-    search = st.text_input(
-        "🔍 Player Search"
-    )
+    col1, col2 = st.columns(2)
 
-    pokemon_search = st.text_input(
-        "🐾 Pokemon Search"
-    )
+    with col1:
+        search = st.text_input(
+            "🔍 Player Search"
+        )
+
+    with col2:
+        pokemon_search = st.text_input(
+            "🐾 Pokemon Search"
+        )
 
     only_replay = st.toggle(
         "📹 Replayありのみ",
         value=False
     )
 
-    page = st.segmented_control(
+    page = st.select_slider(
         "Page",
         options=[
             "1-50",
@@ -456,7 +426,7 @@ if not player:
             "401-450",
             "451-500"
         ],
-        default="1-50"
+        value="1-50"
     )
 
     start_rank = int(
@@ -481,38 +451,41 @@ if not player:
         ]
 
     # =====================================
-    # TABLE HEADER
+    # HEADER
     # =====================================
 
-    st.markdown("""
+    st.html("""
     <div style="
     display:flex;
-    justify-content:space-between;
     align-items:center;
 
-    padding:4px 10px;
-    margin-bottom:4px;
+    background:#111827;
+
+    border-radius:12px;
+    padding:10px;
+
+    margin-bottom:8px;
 
     color:#9ca3af;
     font-size:12px;
     font-weight:700;
     ">
 
-    <div style="width:48px;">#</div>
+    <div style="width:52px;">#</div>
 
     <div style="flex:1;">
     Player
     </div>
 
     <div style="
-    width:60px;
+    width:70px;
     text-align:right;
     ">
     Elo
     </div>
 
     <div style="
-    width:55px;
+    width:60px;
     text-align:right;
     ">
     GXE
@@ -522,11 +495,11 @@ if not player:
     width:72px;
     text-align:right;
     ">
-    Latest
+    Replay
     </div>
 
     </div>
-    """, unsafe_allow_html=True)
+    """)
 
     # =====================================
     # ROWS
@@ -534,7 +507,7 @@ if not player:
 
     for _, row in ladder_df.iterrows():
 
-        status, replay_date, diff = (
+        status, replay_date = (
             latest_replay_info(
                 row["Name"]
             )
@@ -542,13 +515,9 @@ if not player:
 
         if (
             only_replay
-            and replay_date == "NoReplay"
+            and replay_date == "None"
         ):
             continue
-
-        # =====================================
-        # POKEMON FILTER
-        # =====================================
 
         if pokemon_search:
 
@@ -596,14 +565,13 @@ if not player:
         if status == "🟢":
             bg = "#0f172a"
 
-        row_html = f"""
+        st.html(f"""
         <a
         href="?player={urllib.parse.quote(row['Name'])}"
         target="_self"
         style="
         text-decoration:none;
         color:white;
-        display:block;
         "
         >
 
@@ -612,26 +580,22 @@ if not player:
         style="
         display:flex;
         align-items:center;
-        justify-content:space-between;
 
         background:{bg};
+
+        border:1px solid #222;
+        border-radius:12px;
 
         padding:12px 10px;
         margin-bottom:6px;
 
-        border-radius:12px;
-        border:1px solid #222;
-
         color:white;
-
-        font-size:15px;
-        font-weight:600;
         "
         >
 
         <div style="
-        width:48px;
-        flex-shrink:0;
+        width:52px;
+        font-weight:700;
         ">
         #{row['Rank']}
         </div>
@@ -639,22 +603,23 @@ if not player:
         <div style="
         flex:1;
         overflow:hidden;
-        white-space:nowrap;
         text-overflow:ellipsis;
-        padding:0 8px;
+        white-space:nowrap;
+        font-weight:600;
         ">
         {status} {row['Name']}
         </div>
 
         <div style="
-        width:60px;
+        width:70px;
         text-align:right;
+        font-weight:700;
         ">
         {row['Elo']}
         </div>
 
         <div style="
-        width:55px;
+        width:60px;
         text-align:right;
         ">
         {row['GXE']}
@@ -672,12 +637,7 @@ if not player:
         </div>
 
         </a>
-        """
-
-        st.markdown(
-            row_html,
-            unsafe_allow_html=True
-        )
+        """)
 
 # =====================================
 # PLAYER PAGE
@@ -706,10 +666,10 @@ else:
         st.info("Replayなし")
         st.stop()
 
-    replay_limit = st.selectbox(
+    replay_limit = st.select_slider(
         "Replay Count",
-        [10, 20, 50],
-        index=0
+        options=[10, 20, 50],
+        value=10
     )
 
     replays = replays[:replay_limit]
@@ -752,103 +712,103 @@ else:
         ).strftime("%m/%d")
 
         result = (
-            "🟢"
+            "🟢 WIN"
             if winner == player
-            else "🔴"
+            else "🔴 LOSE"
         )
 
         p1_icons = "".join([
-            f'<img src="{icon_url(mon)}" width="28">'
+            f'<img src="{icon_url(mon)}" width="32">'
             for mon in p1_team.split(",")
             if mon
         ])
 
         p2_icons = "".join([
-            f'<img src="{icon_url(mon)}" width="28">'
+            f'<img src="{icon_url(mon)}" width="32">'
             for mon in p2_team.split(",")
             if mon
         ])
 
-        st.markdown(
-            f"""
-            <a
-            href="{replay_url}"
-            target="_blank"
-            style="
-            text-decoration:none;
-            color:inherit;
-            "
-            >
+        st.html(f"""
+        <a
+        href="{replay_url}"
+        target="_blank"
+        style="
+        text-decoration:none;
+        color:white;
+        "
+        >
 
-            <div style="
-            border:1px solid #333;
-            border-radius:12px;
-            padding:12px;
-            margin-bottom:10px;
-            background:#111827;
-            ">
+        <div
+        class="replay-card"
+        style="
+        background:#111827;
 
-            <div style="
-            display:flex;
-            justify-content:space-between;
-            align-items:center;
-            color:white;
-            margin-bottom:10px;
-            font-size:14px;
-            ">
+        border:1px solid #222;
+        border-radius:14px;
 
-            <div>
-            <b>{rating}</b>
-            </div>
+        padding:14px;
+        margin-bottom:10px;
+        "
+        >
 
-            <div>
-            {result}
-            </div>
+        <div style="
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
 
-            <div>
-            {date_text}
-            </div>
+        margin-bottom:12px;
 
-            </div>
+        font-size:14px;
+        ">
 
-            <div style="
-            color:white;
-            margin-bottom:10px;
-            ">
+        <div>
+        ⭐ {rating}
+        </div>
 
-            <div style="
-            font-weight:700;
-            margin-bottom:4px;
-            ">
-            {p1}
-            </div>
+        <div>
+        {result}
+        </div>
 
-            <div>
-            {p1_icons}
-            </div>
+        <div style="color:#9ca3af;">
+        {date_text}
+        </div>
 
-            </div>
+        </div>
 
-            <div style="
-            color:white;
-            ">
+        <div style="
+        margin-bottom:12px;
+        ">
 
-            <div style="
-            font-weight:700;
-            margin-bottom:4px;
-            ">
-            {p2}
-            </div>
+        <div style="
+        font-weight:700;
+        margin-bottom:6px;
+        ">
+        {p1}
+        </div>
 
-            <div>
-            {p2_icons}
-            </div>
+        <div>
+        {p1_icons}
+        </div>
 
-            </div>
+        </div>
 
-            </div>
+        <div>
 
-            </a>
-            """,
-            unsafe_allow_html=True
-        )
+        <div style="
+        font-weight:700;
+        margin-bottom:6px;
+        ">
+        {p2}
+        </div>
+
+        <div>
+        {p2_icons}
+        </div>
+
+        </div>
+
+        </div>
+
+        </a>
+        """)
