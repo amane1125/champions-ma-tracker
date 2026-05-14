@@ -481,7 +481,7 @@ if not player:
         ]
 
     # =====================================
-    # HEADER ROW
+    # TABLE HEADER
     # =====================================
 
     st.markdown("""
@@ -601,10 +601,12 @@ if not player:
         style="
         text-decoration:none;
         color:white;
+        display:block;
         "
         >
 
-        <div class="ladder-row"
+        <div
+        class="ladder-row"
         style="
         display:flex;
         align-items:center;
@@ -622,7 +624,8 @@ if not player:
 
         font-size:15px;
         font-weight:600;
-        ">
+        "
+        >
 
         <div style="
         width:48px;
