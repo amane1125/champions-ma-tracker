@@ -63,10 +63,37 @@ CREATE TABLE IF NOT EXISTS replay_cache (
 conn.commit()
 
 # =========================
+# STYLE
+# =========================
+
+st.markdown("""
+<style>
+
+html, body, [class*="css"]  {
+    font-family: sans-serif;
+}
+
+a {
+    text-decoration: none !important;
+}
+
+.ladder-row:hover {
+    background: #1f2937 !important;
+    transition: 0.15s;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+# =========================
 # REFRESH
 # =========================
 
 top1, top2 = st.columns([8, 1])
+
+with top1:
+
+    st.title("🎮 Champions M-A Tracker")
 
 with top2:
 
@@ -74,6 +101,10 @@ with top2:
 
         st.cache_data.clear()
         st.rerun()
+
+st.caption(
+    "[Gen 9 Champions] VGC 2026 Reg M-A"
+)
 
 # =========================
 # API
@@ -110,7 +141,7 @@ def fetch_ladder():
 @st.cache_data(ttl=300)
 def fetch_replays(username):
 
-    time.sleep(0.15)
+    time.sleep(0.12)
 
     try:
 
@@ -403,12 +434,6 @@ player = st.query_params.get(
 
 if not player:
 
-    st.title("🎮 Champions M-A Tracker")
-
-    st.caption(
-        "[Gen 9 Champions] VGC 2026 Reg M-A"
-    )
-
     ladder_df = fetch_ladder()
 
     search = st.text_input(
@@ -466,17 +491,32 @@ if not player:
             )
         ]
 
-    header = st.columns(
-        [1, 5, 2, 2, 2]
-    )
+    # =====================
+    # HEADER
+    # =====================
 
-    header[0].markdown("**#**")
-    header[1].markdown("**Player**")
-    header[2].markdown("**Elo**")
-    header[3].markdown("**GXE**")
-    header[4].markdown("**Latest**")
+    st.markdown("""
+    <div style="
+    display:flex;
+    justify-content:space-between;
+    padding:6px 10px;
+    font-size:13px;
+    color:#9ca3af;
+    font-weight:700;
+    ">
 
-    st.divider()
+    <div style="width:50px;">#</div>
+    <div style="flex:1;">Player</div>
+    <div style="width:60px;text-align:right;">Elo</div>
+    <div style="width:55px;text-align:right;">GXE</div>
+    <div style="width:70px;text-align:right;">Latest</div>
+
+    </div>
+    """, unsafe_allow_html=True)
+
+    # =====================
+    # ROWS
+    # =====================
 
     for _, row in ladder_df.iterrows():
 
@@ -538,38 +578,84 @@ if not player:
             if not found:
                 continue
 
-        cols = st.columns(
-            [1, 5, 2, 2, 2]
-        )
+        bg = "#111827"
 
-        cols[0].markdown(
-            f"**#{row['Rank']}**"
-        )
+        if status == "🟢":
+            bg = "#0f172a"
 
-        if cols[1].button(
-            f"{status} {row['Name']}",
-            key=f"player_{row['Name']}",
-            use_container_width=True
-        ):
+        row_html = f"""
+        <a
+        href="?player={urllib.parse.quote(row['Name'])}"
+        target="_self"
+        >
 
-            st.query_params["player"] = (
-                urllib.parse.quote(
-                    row["Name"]
-                )
-            )
+        <div class="ladder-row"
+        style="
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
 
-            st.rerun()
+        background:{bg};
 
-        cols[2].markdown(
-            str(row["Elo"])
-        )
+        padding:12px 10px;
+        margin-bottom:6px;
 
-        cols[3].markdown(
-            str(row["GXE"])
-        )
+        border-radius:12px;
+        border:1px solid #222;
 
-        cols[4].markdown(
-            replay_date
+        color:white;
+
+        font-size:15px;
+        font-weight:600;
+        ">
+
+        <div style="
+        width:50px;
+        flex-shrink:0;
+        ">
+        #{row['Rank']}
+        </div>
+
+        <div style="
+        flex:1;
+        overflow:hidden;
+        white-space:nowrap;
+        text-overflow:ellipsis;
+        padding:0 8px;
+        ">
+        {status} {row['Name']}
+        </div>
+
+        <div style="
+        width:60px;
+        text-align:right;
+        ">
+        {row['Elo']}
+        </div>
+
+        <div style="
+        width:55px;
+        text-align:right;
+        ">
+        {row['GXE']}
+        </div>
+
+        <div style="
+        width:70px;
+        text-align:right;
+        color:#9ca3af;
+        font-size:13px;
+        ">
+        {replay_date}
+        </div>
+
+        </div>
+        </a>
+        """
+
+        st.markdown(
+            row_html,
+            unsafe_allow_html=True
         )
 
 # =========================
@@ -585,7 +671,6 @@ else:
     if st.button("← Back"):
 
         st.query_params.clear()
-
         st.rerun()
 
     st.title(player)
@@ -657,7 +742,7 @@ else:
         for mon in p1_team.split(","):
 
             p1_icons += (
-                f'<img src="{icon_url(mon)}" width="26">'
+                f'<img src="{icon_url(mon)}" width="28">'
             )
 
         p2_icons = ""
@@ -665,7 +750,7 @@ else:
         for mon in p2_team.split(","):
 
             p2_icons += (
-                f'<img src="{icon_url(mon)}" width="26">'
+                f'<img src="{icon_url(mon)}" width="28">'
             )
 
         st.markdown(
@@ -681,9 +766,9 @@ else:
 
             <div style="
             border:1px solid #333;
-            border-radius:10px;
-            padding:10px;
-            margin-bottom:8px;
+            border-radius:12px;
+            padding:12px;
+            margin-bottom:10px;
             background:#111827;
             ">
 
@@ -691,7 +776,8 @@ else:
             display:flex;
             justify-content:space-between;
             color:white;
-            margin-bottom:8px;
+            margin-bottom:10px;
+            font-size:14px;
             ">
 
             <div><b>{rating}</b></div>
@@ -700,17 +786,31 @@ else:
 
             </div>
 
-            <div style="color:white;">
-            <b>{p1}</b><br>
-            {p1_icons}
-            </div>
-
             <div style="
-            margin-top:6px;
             color:white;
+            margin-bottom:8px;
             ">
 
-            <b>{p2}</b><br>
+            <div style="
+            font-weight:700;
+            margin-bottom:4px;
+            ">
+            {p1}
+            </div>
+
+            {p1_icons}
+
+            </div>
+
+            <div style="color:white;">
+
+            <div style="
+            font-weight:700;
+            margin-bottom:4px;
+            ">
+            {p2}
+            </div>
+
             {p2_icons}
 
             </div>
