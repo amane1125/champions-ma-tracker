@@ -7,9 +7,9 @@ import urllib.parse
 import sqlite3
 from datetime import datetime, timezone
 
-# =========================
-# PAGE
-# =========================
+# =====================================
+# PAGE CONFIG
+# =====================================
 
 st.set_page_config(
     page_title="Champions M-A Tracker",
@@ -17,9 +17,9 @@ st.set_page_config(
     layout="wide"
 )
 
-# =========================
+# =====================================
 # CONFIG
-# =========================
+# =====================================
 
 FORMAT_ID = "gen9championsvgc2026regma"
 
@@ -34,9 +34,9 @@ REPLAY_SEARCH_URL = (
 
 PAGE_SIZE = 50
 
-# =========================
+# =====================================
 # SQLITE
-# =========================
+# =====================================
 
 conn = sqlite3.connect(
     "replays.db",
@@ -62,14 +62,14 @@ CREATE TABLE IF NOT EXISTS replay_cache (
 
 conn.commit()
 
-# =========================
+# =====================================
 # STYLE
-# =========================
+# =====================================
 
 st.markdown("""
 <style>
 
-html, body, [class*="css"]  {
+html, body, [class*="css"] {
     font-family: sans-serif;
 }
 
@@ -82,23 +82,25 @@ a {
     transition: 0.15s;
 }
 
+.block-container {
+    padding-top: 1rem;
+    padding-bottom: 4rem;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
-# =========================
-# REFRESH
-# =========================
+# =====================================
+# HEADER
+# =====================================
 
 top1, top2 = st.columns([8, 1])
 
 with top1:
-
     st.title("🎮 Champions M-A Tracker")
 
 with top2:
-
     if st.button("🔄"):
-
         st.cache_data.clear()
         st.rerun()
 
@@ -106,9 +108,9 @@ st.caption(
     "[Gen 9 Champions] VGC 2026 Reg M-A"
 )
 
-# =========================
+# =====================================
 # API
-# =========================
+# =====================================
 
 @st.cache_data(ttl=300)
 def fetch_ladder():
@@ -121,7 +123,6 @@ def fetch_ladder():
     data = r.json()
 
     if isinstance(data, dict):
-
         if "toplist" in data:
             data = data["toplist"]
 
@@ -141,7 +142,7 @@ def fetch_ladder():
 @st.cache_data(ttl=300)
 def fetch_replays(username):
 
-    time.sleep(0.12)
+    time.sleep(0.1)
 
     try:
 
@@ -175,7 +176,6 @@ def fetch_replays(username):
         return []
 
     except:
-
         return []
 
 def fetch_log(replay_id):
@@ -193,12 +193,11 @@ def fetch_log(replay_id):
         return ""
 
     except:
-
         return ""
 
-# =========================
+# =====================================
 # ICON FIX
-# =========================
+# =====================================
 
 ICON_FIXES = {
 
@@ -233,9 +232,9 @@ ICON_FIXES = {
         "enamorustherian"
 }
 
-# =========================
-# TEAM
-# =========================
+# =====================================
+# TEAM PARSE
+# =====================================
 
 def extract_teams(log_text):
 
@@ -254,9 +253,9 @@ def extract_teams(log_text):
         list(dict.fromkeys(p2))[:6]
     )
 
-# =========================
-# ICON
-# =========================
+# =====================================
+# ICON URL
+# =====================================
 
 def clean_name(name):
 
@@ -273,7 +272,6 @@ def clean_name(name):
         ":",
         "-"
     ]:
-
         name = name.replace(c, "")
 
     return name
@@ -285,9 +283,9 @@ def icon_url(name):
         f"sprites/gen5/{clean_name(name)}.png"
     )
 
-# =========================
+# =====================================
 # CACHE REPLAY
-# =========================
+# =====================================
 
 def cache_replay(replay):
 
@@ -330,20 +328,17 @@ def cache_replay(replay):
 
     p1 = (
         p1_name_match.group(1)
-        if p1_name_match
-        else ""
+        if p1_name_match else ""
     )
 
     p2 = (
         p2_name_match.group(1)
-        if p2_name_match
-        else ""
+        if p2_name_match else ""
     )
 
     winner = (
         win_match.group(1)
-        if win_match
-        else ""
+        if win_match else ""
     )
 
     cur.execute("""
@@ -364,19 +359,18 @@ def cache_replay(replay):
 
     conn.commit()
 
-# =========================
-# STATUS
-# =========================
+# =====================================
+# REPLAY STATUS
+# =====================================
 
 def latest_replay_info(name):
 
     replays = fetch_replays(name)
 
     if not replays:
-
         return (
             "❌",
-            "No Replay",
+            "NoReplay",
             999
         )
 
@@ -387,7 +381,6 @@ def latest_replay_info(name):
     )
 
     if not uploadtime:
-
         return (
             "⚪",
             "Unknown",
@@ -419,18 +412,18 @@ def latest_replay_info(name):
         diff
     )
 
-# =========================
-# QUERY
-# =========================
+# =====================================
+# QUERY PARAM
+# =====================================
 
 player = st.query_params.get(
     "player",
     None
 )
 
-# =========================
+# =====================================
 # TOP PAGE
-# =========================
+# =====================================
 
 if not player:
 
@@ -445,7 +438,7 @@ if not player:
     )
 
     only_replay = st.toggle(
-        "📹 Replayありのみ表示",
+        "📹 Replayありのみ",
         value=False
     )
 
@@ -471,11 +464,7 @@ if not player:
     )
 
     start_idx = start_rank - 1
-
-    end_idx = (
-        start_idx
-        + PAGE_SIZE
-    )
+    end_idx = start_idx + PAGE_SIZE
 
     ladder_df = ladder_df.iloc[
         start_idx:end_idx
@@ -491,32 +480,55 @@ if not player:
             )
         ]
 
-    # =====================
-    # HEADER
-    # =====================
+    # =====================================
+    # HEADER ROW
+    # =====================================
 
     st.markdown("""
     <div style="
     display:flex;
     justify-content:space-between;
-    padding:6px 10px;
-    font-size:13px;
+    padding:4px 10px;
+    margin-bottom:4px;
+
     color:#9ca3af;
+    font-size:12px;
     font-weight:700;
     ">
 
-    <div style="width:50px;">#</div>
-    <div style="flex:1;">Player</div>
-    <div style="width:60px;text-align:right;">Elo</div>
-    <div style="width:55px;text-align:right;">GXE</div>
-    <div style="width:70px;text-align:right;">Latest</div>
+    <div style="width:48px;">#</div>
+
+    <div style="flex:1;">
+    Player
+    </div>
+
+    <div style="
+    width:60px;
+    text-align:right;
+    ">
+    Elo
+    </div>
+
+    <div style="
+    width:55px;
+    text-align:right;
+    ">
+    GXE
+    </div>
+
+    <div style="
+    width:72px;
+    text-align:right;
+    ">
+    Latest
+    </div>
 
     </div>
     """, unsafe_allow_html=True)
 
-    # =====================
+    # =====================================
     # ROWS
-    # =====================
+    # =====================================
 
     for _, row in ladder_df.iterrows():
 
@@ -528,13 +540,13 @@ if not player:
 
         if (
             only_replay
-            and replay_date == "No Replay"
+            and replay_date == "NoReplay"
         ):
             continue
 
-        # =====================
+        # =====================================
         # POKEMON FILTER
-        # =====================
+        # =====================================
 
         if pokemon_search:
 
@@ -571,7 +583,6 @@ if not player:
                     pokemon_search.lower()
                     in team_text
                 ):
-
                     found = True
                     break
 
@@ -587,6 +598,10 @@ if not player:
         <a
         href="?player={urllib.parse.quote(row['Name'])}"
         target="_self"
+        style="
+        text-decoration:none;
+        color:white;
+        "
         >
 
         <div class="ladder-row"
@@ -610,7 +625,7 @@ if not player:
         ">
 
         <div style="
-        width:50px;
+        width:48px;
         flex-shrink:0;
         ">
         #{row['Rank']}
@@ -641,7 +656,7 @@ if not player:
         </div>
 
         <div style="
-        width:70px;
+        width:72px;
         text-align:right;
         color:#9ca3af;
         font-size:13px;
@@ -650,6 +665,7 @@ if not player:
         </div>
 
         </div>
+
         </a>
         """
 
@@ -658,9 +674,9 @@ if not player:
             unsafe_allow_html=True
         )
 
-# =========================
+# =====================================
 # PLAYER PAGE
-# =========================
+# =====================================
 
 else:
 
@@ -669,7 +685,6 @@ else:
     )
 
     if st.button("← Back"):
-
         st.query_params.clear()
         st.rerun()
 
@@ -737,21 +752,17 @@ else:
             else "🔴"
         )
 
-        p1_icons = ""
+        p1_icons = "".join([
+            f'<img src="{icon_url(mon)}" width="28">'
+            for mon in p1_team.split(",")
+            if mon
+        ])
 
-        for mon in p1_team.split(","):
-
-            p1_icons += (
-                f'<img src="{icon_url(mon)}" width="28">'
-            )
-
-        p2_icons = ""
-
-        for mon in p2_team.split(","):
-
-            p2_icons += (
-                f'<img src="{icon_url(mon)}" width="28">'
-            )
+        p2_icons = "".join([
+            f'<img src="{icon_url(mon)}" width="28">'
+            for mon in p2_team.split(",")
+            if mon
+        ])
 
         st.markdown(
             f"""
@@ -775,20 +786,29 @@ else:
             <div style="
             display:flex;
             justify-content:space-between;
+            align-items:center;
             color:white;
             margin-bottom:10px;
             font-size:14px;
             ">
 
-            <div><b>{rating}</b></div>
-            <div>{result}</div>
-            <div>{date_text}</div>
+            <div>
+            <b>{rating}</b>
+            </div>
+
+            <div>
+            {result}
+            </div>
+
+            <div>
+            {date_text}
+            </div>
 
             </div>
 
             <div style="
             color:white;
-            margin-bottom:8px;
+            margin-bottom:10px;
             ">
 
             <div style="
@@ -798,11 +818,15 @@ else:
             {p1}
             </div>
 
+            <div>
             {p1_icons}
+            </div>
 
             </div>
 
-            <div style="color:white;">
+            <div style="
+            color:white;
+            ">
 
             <div style="
             font-weight:700;
@@ -811,7 +835,9 @@ else:
             {p2}
             </div>
 
+            <div>
             {p2_icons}
+            </div>
 
             </div>
 
