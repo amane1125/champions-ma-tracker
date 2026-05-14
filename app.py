@@ -4,6 +4,7 @@ import requests
 import re
 import time
 import urllib.parse
+import sqlite3
 from datetime import datetime, timezone
 
 # =========================
@@ -32,6 +33,47 @@ REPLAY_SEARCH_URL = (
 )
 
 PAGE_SIZE = 50
+
+# =========================
+# SQLITE
+# =========================
+
+conn = sqlite3.connect(
+    "replays.db",
+    check_same_thread=False
+)
+
+cur = conn.cursor()
+
+cur.execute("""
+CREATE TABLE IF NOT EXISTS replay_cache (
+
+    replay_id TEXT PRIMARY KEY,
+    p1 TEXT,
+    p2 TEXT,
+    p1_team TEXT,
+    p2_team TEXT,
+    winner TEXT,
+    rating INTEGER,
+    uploadtime INTEGER
+
+)
+""")
+
+conn.commit()
+
+# =========================
+# REFRESH
+# =========================
+
+top1, top2 = st.columns([8, 1])
+
+with top2:
+
+    if st.button("🔄"):
+
+        st.cache_data.clear()
+        st.rerun()
 
 # =========================
 # API
@@ -105,7 +147,6 @@ def fetch_replays(username):
 
         return []
 
-@st.cache_data(ttl=3600)
 def fetch_log(replay_id):
 
     try:
@@ -214,7 +255,86 @@ def icon_url(name):
     )
 
 # =========================
-# REPLAY STATUS
+# CACHE REPLAY
+# =========================
+
+def cache_replay(replay):
+
+    replay_id = replay.get("id")
+
+    cur.execute("""
+    SELECT replay_id
+    FROM replay_cache
+    WHERE replay_id = ?
+    """, (replay_id,))
+
+    exists = cur.fetchone()
+
+    if exists:
+        return
+
+    log_text = fetch_log(replay_id)
+
+    if not log_text:
+        return
+
+    p1_team, p2_team = extract_teams(
+        log_text
+    )
+
+    p1_name_match = re.search(
+        r"\|player\|p1\|([^\n]+)",
+        log_text
+    )
+
+    p2_name_match = re.search(
+        r"\|player\|p2\|([^\n]+)",
+        log_text
+    )
+
+    win_match = re.search(
+        r"\|win\|([^\n]+)",
+        log_text
+    )
+
+    p1 = (
+        p1_name_match.group(1)
+        if p1_name_match
+        else ""
+    )
+
+    p2 = (
+        p2_name_match.group(1)
+        if p2_name_match
+        else ""
+    )
+
+    winner = (
+        win_match.group(1)
+        if win_match
+        else ""
+    )
+
+    cur.execute("""
+    INSERT OR REPLACE INTO replay_cache
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+
+        replay_id,
+        p1,
+        p2,
+        ",".join(p1_team),
+        ",".join(p2_team),
+        winner,
+        replay.get("rating", 0),
+        replay.get("uploadtime", 0)
+
+    ))
+
+    conn.commit()
+
+# =========================
+# STATUS
 # =========================
 
 def latest_replay_info(name):
@@ -292,7 +412,11 @@ if not player:
     ladder_df = fetch_ladder()
 
     search = st.text_input(
-        "🔍 Search Player"
+        "🔍 Player Search"
+    )
+
+    pokemon_search = st.text_input(
+        "🐾 Pokemon Search"
     )
 
     only_replay = st.toggle(
@@ -342,13 +466,17 @@ if not player:
             )
         ]
 
-    st.caption(
-        f"{len(ladder_df)} players"
+    header = st.columns(
+        [1, 5, 2, 2, 2]
     )
 
-    # =====================
-    # ROWS
-    # =====================
+    header[0].markdown("**#**")
+    header[1].markdown("**Player**")
+    header[2].markdown("**Elo**")
+    header[3].markdown("**GXE**")
+    header[4].markdown("**Latest**")
+
+    st.divider()
 
     for _, row in ladder_df.iterrows():
 
@@ -364,50 +492,85 @@ if not player:
         ):
             continue
 
-        with st.container(border=True):
+        # =====================
+        # POKEMON FILTER
+        # =====================
 
-            c1, c2, c3, c4, c5 = st.columns(
-                [1, 4, 2, 2, 2]
+        if pokemon_search:
+
+            replays = fetch_replays(
+                row["Name"]
             )
 
-            c1.markdown(
-                f"### #{row['Rank']}"
-            )
+            found = False
 
-            if c2.button(
-                f"{status} {row['Name']}",
-                key=f"player_{row['Name']}",
-                use_container_width=True
-            ):
+            for replay in replays[:5]:
 
-                st.query_params["player"] = (
-                    urllib.parse.quote(
-                        row["Name"]
-                    )
+                cache_replay(replay)
+
+                replay_id = replay.get("id")
+
+                cur.execute("""
+                SELECT p1_team, p2_team
+                FROM replay_cache
+                WHERE replay_id = ?
+                """, (replay_id,))
+
+                result = cur.fetchone()
+
+                if not result:
+                    continue
+
+                team_text = (
+                    result[0]
+                    + ","
+                    + result[1]
+                ).lower()
+
+                if (
+                    pokemon_search.lower()
+                    in team_text
+                ):
+
+                    found = True
+                    break
+
+            if not found:
+                continue
+
+        cols = st.columns(
+            [1, 5, 2, 2, 2]
+        )
+
+        cols[0].markdown(
+            f"**#{row['Rank']}**"
+        )
+
+        if cols[1].button(
+            f"{status} {row['Name']}",
+            key=f"player_{row['Name']}",
+            use_container_width=True
+        ):
+
+            st.query_params["player"] = (
+                urllib.parse.quote(
+                    row["Name"]
                 )
-
-                st.rerun()
-
-            c3.markdown(
-                f"""
-                **Elo**  
-                {row['Elo']}
-                """
             )
 
-            c4.markdown(
-                f"""
-                **GXE**  
-                {row['GXE']}
-                """
-            )
+            st.rerun()
 
-            c5.markdown(
-                f"""
-                **Latest**  
-                {replay_date}
-                """
-            )
+        cols[2].markdown(
+            str(row["Elo"])
+        )
+
+        cols[3].markdown(
+            str(row["GXE"])
+        )
+
+        cols[4].markdown(
+            replay_date
+        )
 
 # =========================
 # PLAYER PAGE
@@ -438,10 +601,6 @@ else:
         st.info("Replayなし")
         st.stop()
 
-    # =====================
-    # LIMIT
-    # =====================
-
     replay_limit = st.selectbox(
         "Replay Count",
         [10, 20, 50],
@@ -450,133 +609,115 @@ else:
 
     replays = replays[:replay_limit]
 
-    # =====================
-    # REPLAYS
-    # =====================
-
     for replay in replays:
 
-        replay_id = replay.get(
-            "id",
-            ""
-        )
+        cache_replay(replay)
 
-        if not replay_id:
+        replay_id = replay.get("id")
+
+        cur.execute("""
+        SELECT *
+        FROM replay_cache
+        WHERE replay_id = ?
+        """, (replay_id,))
+
+        cached = cur.fetchone()
+
+        if not cached:
             continue
+
+        (
+            _,
+            p1,
+            p2,
+            p1_team,
+            p2_team,
+            winner,
+            rating,
+            uploadtime
+        ) = cached
 
         replay_url = (
             "https://replay.pokemonshowdown.com/"
             f"{replay_id}"
         )
 
-        rating = replay.get(
-            "rating",
-            "?"
+        date_text = datetime.fromtimestamp(
+            uploadtime
+        ).strftime("%m/%d")
+
+        result = (
+            "🟢"
+            if winner == player
+            else "🔴"
         )
 
-        uploadtime = replay.get(
-            "uploadtime"
+        p1_icons = ""
+
+        for mon in p1_team.split(","):
+
+            p1_icons += (
+                f'<img src="{icon_url(mon)}" width="26">'
+            )
+
+        p2_icons = ""
+
+        for mon in p2_team.split(","):
+
+            p2_icons += (
+                f'<img src="{icon_url(mon)}" width="26">'
+            )
+
+        st.markdown(
+            f"""
+            <a
+            href="{replay_url}"
+            target="_blank"
+            style="
+            text-decoration:none;
+            color:inherit;
+            "
+            >
+
+            <div style="
+            border:1px solid #333;
+            border-radius:10px;
+            padding:10px;
+            margin-bottom:8px;
+            background:#111827;
+            ">
+
+            <div style="
+            display:flex;
+            justify-content:space-between;
+            color:white;
+            margin-bottom:8px;
+            ">
+
+            <div><b>{rating}</b></div>
+            <div>{result}</div>
+            <div>{date_text}</div>
+
+            </div>
+
+            <div style="color:white;">
+            <b>{p1}</b><br>
+            {p1_icons}
+            </div>
+
+            <div style="
+            margin-top:6px;
+            color:white;
+            ">
+
+            <b>{p2}</b><br>
+            {p2_icons}
+
+            </div>
+
+            </div>
+
+            </a>
+            """,
+            unsafe_allow_html=True
         )
-
-        if uploadtime:
-
-            date_text = datetime.fromtimestamp(
-                uploadtime
-            ).strftime(
-                "%m/%d"
-            )
-
-        else:
-
-            date_text = "?"
-
-        # =====================
-        # LAZY LOAD LOG
-        # =====================
-
-        with st.container(border=True):
-
-            top1, top2, top3 = st.columns(
-                [2, 1, 1]
-            )
-
-            top1.markdown(
-                f"### {rating}"
-            )
-
-            top2.markdown(
-                f"### {date_text}"
-            )
-
-            st.link_button(
-                "Open",
-                replay_url,
-                use_container_width=True
-            )
-
-            if st.button(
-                "Show Teams",
-                key=f"teams_{replay_id}",
-                use_container_width=True
-            ):
-
-                log_text = fetch_log(
-                    replay_id
-                )
-
-                p1_team, p2_team = extract_teams(
-                    log_text
-                )
-
-                p1_name_match = re.search(
-                    r"\|player\|p1\|([^\n]+)",
-                    log_text
-                )
-
-                p2_name_match = re.search(
-                    r"\|player\|p2\|([^\n]+)",
-                    log_text
-                )
-
-                p1_name = (
-                    p1_name_match.group(1)
-                    if p1_name_match
-                    else "P1"
-                )
-
-                p2_name = (
-                    p2_name_match.group(1)
-                    if p2_name_match
-                    else "P2"
-                )
-
-                p1_icons = ""
-
-                for mon in p1_team:
-
-                    p1_icons += (
-                        f'<img src="{icon_url(mon)}" width="28">'
-                    )
-
-                p2_icons = ""
-
-                for mon in p2_team:
-
-                    p2_icons += (
-                        f'<img src="{icon_url(mon)}" width="28">'
-                    )
-
-                st.markdown(
-                    f"""
-                    **{p1_name}**
-
-                    {p1_icons}
-
-                    vs
-
-                    **{p2_name}**
-
-                    {p2_icons}
-                    """,
-                    unsafe_allow_html=True
-                )
