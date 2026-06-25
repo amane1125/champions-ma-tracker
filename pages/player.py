@@ -8,7 +8,7 @@ st.set_page_config(
     layout="wide"
 )
 
-FORMAT_ID = "gen9championsvgc2026regma"
+FORMAT_ID = "gen9championsvgc2026regmb"
 
 REPLAY_SEARCH_URL = (
     "https://replay.pokemonshowdown.com/search.json"
