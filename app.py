@@ -21,7 +21,7 @@ st.set_page_config(
 # CONFIG
 # =====================================
 
-FORMAT_ID = "gen9championsvgc2026regma"
+FORMAT_ID = "gen9championsvgc2026regmb"
 
 LADDER_URL = (
     "https://pokemonshowdown.com/ladder/"
