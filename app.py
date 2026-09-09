@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 # =====================================
 
 st.set_page_config(
-    page_title="Champions M-A Tracker",
+    page_title="Champions M-C Tracker",
     page_icon="🎮",
     layout="wide"
 )
@@ -21,7 +21,7 @@ st.set_page_config(
 # CONFIG
 # =====================================
 
-FORMAT_ID = "gen9championsvgc2026regmb"
+FORMAT_ID = "gen9championsvgc2026regmc"
 
 LADDER_URL = (
     "https://pokemonshowdown.com/ladder/"
@@ -106,7 +106,7 @@ a {
 top1, top2 = st.columns([8, 1])
 
 with top1:
-    st.title("🎮 Champions M-A Tracker")
+    st.title("🎮 Champions M-C Tracker")
 
 with top2:
     if st.button("🔄"):
@@ -114,7 +114,7 @@ with top2:
         st.rerun()
 
 st.caption(
-    "[Gen 9 Champions] VGC 2026 Reg M-A"
+    "[Gen 9 Champions] VGC 2026 Reg M-C"
 )
 
 # =====================================
