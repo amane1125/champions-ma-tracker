@@ -107,9 +107,7 @@ with top2:
         st.cache_data.clear()
         st.rerun()
 
-st.caption(
-    "[Gen 9 Champions] VGC 2026 Reg M-C"
-)
+st.caption("Pokémon Showdown format is selectable below.")
 
 # =====================================
 # API
@@ -118,13 +116,15 @@ st.caption(
 @st.cache_data(ttl=300)
 def fetch_ladder(format_id):
 
-    r = requests.get(
-        f"{LADDER_BASE_URL}{format_id}.json",
-        timeout=20
-    )
-    r.raise_for_status()
-
-    data = r.json()
+    try:
+        r = requests.get(
+            f"{LADDER_BASE_URL}{format_id}.json",
+            timeout=20
+        )
+        r.raise_for_status()
+        data = r.json()
+    except (requests.RequestException, ValueError):
+        return pd.DataFrame(columns=["Rank", "Name", "Elo", "GXE"])
 
     if isinstance(data, dict):
         data = data.get("toplist", [])
@@ -400,6 +400,10 @@ if not format_id:
 if not player:
 
     ladder_df = fetch_ladder(format_id)
+    if ladder_df.empty:
+        st.warning(
+            "ランキングを取得できませんでした。Format IDが正しいか確認してください。"
+        )
 
     col1, col2 = st.columns(2)
 
@@ -575,7 +579,7 @@ if not player:
 
         st.html(f"""
         <a
-        href="?player={urllib.parse.quote(row['Name'])}"
+        href="?player={urllib.parse.quote(row['Name'])}&format={urllib.parse.quote(format_id)}"
         target="_self"
         style="
         text-decoration:none;
