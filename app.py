@@ -21,16 +21,10 @@ st.set_page_config(
 # CONFIG
 # =====================================
 
-FORMAT_ID = "gen9championsvgc2026regmc"
+DEFAULT_FORMAT_ID = "gen9championsvgc2026regmc"
 
-LADDER_URL = (
-    "https://pokemonshowdown.com/ladder/"
-    f"{FORMAT_ID}.json"
-)
-
-REPLAY_SEARCH_URL = (
-    "https://replay.pokemonshowdown.com/search.json"
-)
+LADDER_BASE_URL = "https://pokemonshowdown.com/ladder/"
+REPLAY_SEARCH_URL = "https://replay.pokemonshowdown.com/search.json"
 
 PAGE_SIZE = 50
 
@@ -113,23 +107,24 @@ with top2:
         st.cache_data.clear()
         st.rerun()
 
-st.caption(
-    "[Gen 9 Champions] VGC 2026 Reg M-C"
-)
+st.caption("Pokémon Showdown format is selectable below.")
 
 # =====================================
 # API
 # =====================================
 
 @st.cache_data(ttl=300)
-def fetch_ladder():
+def fetch_ladder(format_id):
 
-    r = requests.get(
-        LADDER_URL,
-        timeout=20
-    )
-
-    data = r.json()
+    try:
+        r = requests.get(
+            f"{LADDER_BASE_URL}{format_id}.json",
+            timeout=20
+        )
+        r.raise_for_status()
+        data = r.json()
+    except (requests.RequestException, ValueError):
+        return pd.DataFrame(columns=["Rank", "Name", "Elo", "GXE"])
 
     if isinstance(data, dict):
         data = data.get("toplist", [])
@@ -148,7 +143,7 @@ def fetch_ladder():
     return pd.DataFrame(rows)
 
 @st.cache_data(ttl=300)
-def fetch_replays(username):
+def fetch_replays(username, format_id):
 
     time.sleep(0.05)
 
@@ -158,7 +153,7 @@ def fetch_replays(username):
             REPLAY_SEARCH_URL,
             params={
                 "user": username,
-                "format": FORMAT_ID
+                "format": format_id
             },
             timeout=20
         )
@@ -341,9 +336,9 @@ def cache_replay(replay):
 # REPLAY STATUS
 # =====================================
 
-def latest_replay_info(name):
+def latest_replay_info(name, format_id):
 
-    replays = fetch_replays(name)
+    replays = fetch_replays(name, format_id)
 
     if not replays:
         return "❌", "None"
@@ -382,18 +377,33 @@ def latest_replay_info(name):
 # QUERY PARAM
 # =====================================
 
-player = st.query_params.get(
-    "player",
-    None
-)
+player = st.query_params.get("player", None)
+
+# フォーマットIDはURLにも保持し、詳細画面・戻る操作でも引き継ぐ
+initial_format_id = st.query_params.get("format", DEFAULT_FORMAT_ID)
+if not isinstance(initial_format_id, str) or not initial_format_id.strip():
+    initial_format_id = DEFAULT_FORMAT_ID
 
 # =====================================
 # TOP PAGE
 # =====================================
 
+format_id = st.text_input(
+    "🎮 Format ID",
+    value=initial_format_id,
+    help="Pokémon ShowdownのフォーマットIDを入力してください。例: gen9championsvgc2026regmc"
+).strip().lower()
+
+if not format_id:
+    format_id = DEFAULT_FORMAT_ID
+
 if not player:
 
-    ladder_df = fetch_ladder()
+    ladder_df = fetch_ladder(format_id)
+    if ladder_df.empty:
+        st.warning(
+            "ランキングを取得できませんでした。Format IDが正しいか確認してください。"
+        )
 
     col1, col2 = st.columns(2)
 
@@ -509,7 +519,8 @@ if not player:
 
         status, replay_date = (
             latest_replay_info(
-                row["Name"]
+                row["Name"],
+                format_id
             )
         )
 
@@ -522,7 +533,8 @@ if not player:
         if pokemon_search:
 
             replays = fetch_replays(
-                row["Name"]
+                row["Name"],
+                format_id
             )
 
             found = False
@@ -567,7 +579,7 @@ if not player:
 
         st.html(f"""
         <a
-        href="?player={urllib.parse.quote(row['Name'])}"
+        href="?player={urllib.parse.quote(row['Name'])}&format={urllib.parse.quote(format_id)}"
         target="_self"
         style="
         text-decoration:none;
@@ -651,11 +663,12 @@ else:
 
     if st.button("← Back"):
         st.query_params.clear()
+        st.query_params["format"] = format_id
         st.rerun()
 
     st.title(player)
 
-    replays = fetch_replays(player)
+    replays = fetch_replays(player, format_id)
 
     st.caption(
         f"{len(replays)} Public Replays"
